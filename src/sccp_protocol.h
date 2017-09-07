@@ -152,6 +152,7 @@ __BEGIN_C_EXTERN__
 typedef struct {
 	uint8_t instance;											/*!< Button Instance */
 	uint8_t type;												/*!< Button Type */
+	skinny_devicetype_t devicetype;
 	void *ptr;												/*!< Pointer to the Line */
 } btnlist;													/*!< Button List Structure */
 

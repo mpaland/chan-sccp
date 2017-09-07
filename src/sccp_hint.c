@@ -1152,6 +1152,7 @@ static void sccp_hint_notifySubscribers(sccp_hint_list_t * hint)
 
 				case SCCP_CHANNELSTATE_DND:
 					//snprintf(displayMessage, sizeof(displayMessage), k.name, sizeof(displayMessage));
+					//hif (subscriber->instance / SKINNY_BUTTONTYPE_BLFSPEEDDIAL
 					snprintf(displayMessage, sizeof(displayMessage), "(DND) %s", k.name);
 					status = SKINNY_BLF_STATUS_DND;	/* dnd */
 					break;
