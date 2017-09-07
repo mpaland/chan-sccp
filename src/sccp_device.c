@@ -827,8 +827,7 @@ static uint8_t sccp_addon_build_buttontemplate(constDevicePtr d, sccp_addon_t *a
 		case SKINNY_DEVICETYPE_CISCO_ADDON_7915_12BUTTON:
 		case SKINNY_DEVICETYPE_CISCO_ADDON_7916_12BUTTON:
 			for (i = 0; i < 12; i++) {
-				//btn[btn_index++].type = SCCP_BUTTONTYPE_MULTI;
-				btn[btn_index++].type = SCCP_BUTTONTYPE_SPEEDDIAL;
+				btn[btn_index++].type = SCCP_BUTTONTYPE_MULTI;
 			}
 			break;
 		case SKINNY_DEVICETYPE_CISCO_ADDON_7915_24BUTTON:
