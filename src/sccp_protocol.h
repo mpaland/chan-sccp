@@ -2874,6 +2874,9 @@ typedef union {
 	} SPCPRegisterTokenReject;
 
 	/*
+	 *      This was sent by a single 7970 with one CP-7914 attached.
+	 *      Message is related to Addons and i suppose it notifies their
+	 *      number, capacity and index.
 	 * Unhandled SCCP Message: unknown(0x0159) 168 bytes length
 	 00000000 - A8 00 00 00 00 00 00 00  59 01 00 00 01 00 00 00  - ........Y.......
 	 00000010 - 01 00 00 00 02 00 00 00  00 00 00 00 00 00 00 00  - ................
@@ -2886,16 +2889,32 @@ typedef union {
 	 00000080 - 00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  - ................
 	 00000090 - 00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  - ................
 	 000000A0 - 00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  - ................	 
+	 *	 
 	 *
-	 *      This was sent by a single 7970 with one CP-7914 attached.
-	 *      Message is related to Addons and i suppose it notifies their
-	 *      number, capacity and index.
+	 *      This was sent by a single 7962 with one CP-7915 attached.
+	 00000000 - a8 00 00 00 00 00 00 00  59 01 00 00 01 00 00 00  - ........Y.......
+	 00000010 - 02 00 00 00 02 00 00 00  00 00 00 00 00 00 00 00  - ................
+	 00000020 - 00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  - ................
+	 00000030 - 6d 61 78 2d 63 68 61 69  6e 65 64 3d 32 20 64 65  - max-chained=2 de
+	 00000040 - 76 69 63 65 4c 69 6e 65  3d 32 34 00 00 00 00 00  - viceLine=24.....
+	 00000050 - 00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  - ................
+	 00000060 - 00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  - ................
+	 00000070 - 00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  - ................
+	 00000080 - 00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  - ................
+	 00000090 - 00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  - ................
+	 000000a0 - 00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  - ................
 	 */
 	struct {
-		uint32_t unknown1;
-		uint32_t unknown2;
-		uint32_t unknown3;
-		char dummy[152];
+		uint32_t unknown1;		// ? instance = 1
+		uint32_t unknown2;		// ? type: 1 = 7914 / 2 = 7915
+		uint32_t unknown3;		// ? max chained = 2
+		uint32_t unknown4;
+		uint32_t unknown5;
+		uint32_t unknown6;
+		uint32_t unknown7;
+		uint32_t unknown8;
+		uint32_t unknown9;
+		char dummy[128];
 	} ExtensionDeviceCaps;
 
 	struct {
