@@ -163,8 +163,9 @@ void __sccp_indicate(const sccp_device_t * const maybe_device, sccp_channel_t * 
 				sccp_dev_displayprompt(d, lineInstance, c->callid, SKINNY_DISP_RING_OUT, GLOB(digittimeout));
 
 				sccp_dev_stoptone(d, lineInstance, c->callid);
-				//if (d->earlyrtp <= SCCP_EARLYRTP_RINGOUT && c->rtp.audio.receiveChannelState == SCCP_RTP_STATUS_INACTIVE) {
-				if (d->earlyrtp <= SCCP_EARLYRTP_RINGOUT && c->rtp.audio.receiveChannelState == SCCP_RTP_STATUS_INACTIVE) {
+
+				// if directrtp, ignore the d->earlyrtp setting and start rtp now. We need to know the phone_remote ip-address:port
+				if ((d->earlyrtp <= SCCP_EARLYRTP_RINGOUT || d->directrtp) && c->rtp.audio.receiveChannelState == SCCP_RTP_STATUS_INACTIVE) {
 					sccp_channel_openReceiveChannel(c);
 				} else {
 					sccp_dev_starttone(d, (uint8_t) SKINNY_TONE_ALERTINGTONE, lineInstance, c->callid, SKINNY_TONEDIRECTION_USER);
@@ -301,12 +302,12 @@ void __sccp_indicate(const sccp_device_t * const maybe_device, sccp_channel_t * 
 			break;
 		case SCCP_CHANNELSTATE_CONNECTED:
 			{
-				d->indicate->connected(d, lineInstance, c->callid, c->calltype, ci);
 				if (c->rtp.audio.receiveChannelState == SCCP_RTP_STATUS_INACTIVE) {
 					sccp_channel_openReceiveChannel(c);
-				} else {
-					sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_3 "%s: Did not reopen an RTP stream as old SCCP state was (%s)\n", d->id, sccp_channelstate2str(c->previousChannelState));
+				} else if (SCCP_RTP_STATUS_INACTIVE == c->rtp.audio.mediaTransmissionState && !d->directrtp) {
+					sccp_channel_startMediaTransmission(c);
 				}
+				d->indicate->connected(d, lineInstance, c->callid, c->calltype, ci);
 				sccp_dev_set_keyset(d, lineInstance, c->callid, KEYMODE_CONNECTED);
 			}
 			break;
@@ -388,12 +389,12 @@ void __sccp_indicate(const sccp_device_t * const maybe_device, sccp_channel_t * 
 			break;
 		case SCCP_CHANNELSTATE_CONNECTEDCONFERENCE:
 			{
-				d->indicate->connected(d, lineInstance, c->callid, c->calltype, ci);
 				if (c->rtp.audio.receiveChannelState == SCCP_RTP_STATUS_INACTIVE) {
 					sccp_channel_openReceiveChannel(c);
-				} else {
-					sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_3 "%s: Did not reopen an RTP stream as old SCCP state was (%s)\n", d->id, sccp_channelstate2str(c->previousChannelState));
+				} else if (SCCP_RTP_STATUS_INACTIVE == c->rtp.audio.mediaTransmissionState && !d->directrtp) {
+					sccp_channel_startMediaTransmission(c);
 				}
+				d->indicate->connected(d, lineInstance, c->callid, c->calltype, ci);
 				sccp_dev_set_keyset(d, lineInstance, c->callid, KEYMODE_CONNCONF);
 			}
 			break;
