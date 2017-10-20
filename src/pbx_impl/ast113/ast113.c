@@ -3633,7 +3633,7 @@ static int register_channel_tech(struct ast_channel_tech *tech)
 	ast_format_cap_append_by_type(tech->capabilities, AST_MEDIA_TYPE_AUDIO);
 #ifdef CS_SCCP_VIDEO
 	ast_format_cap_append_by_type(tech->capabilities, AST_MEDIA_TYPE_VIDEO);
-#endif	
+#endif
 	//ast_format_cap_append_by_type(tech->capabilities, AST_MEDIA_TYPE_TEXT);
 	//pbx_format_cap_append_skinny(tech->capabilities, GLOB(global_preferences));
 

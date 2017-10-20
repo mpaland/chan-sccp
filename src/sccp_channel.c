@@ -709,11 +709,11 @@ void sccp_channel_updateReceiveChannel(constChannelPtr channel)
 	/* \todo possible to skip the closing of the receive channel (needs testing) */
 	/* \todo if this works without closing, this would make changing codecs on the fly possible */
 	if (SCCP_RTP_STATUS_INACTIVE != channel->rtp.audio.receiveChannelState) {
-		sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_2 "%s: (sccp_channel_updateReceiveChannel) Close Receive Channel on channel %d\n", channel->currentDeviceId, channel->callid);
+		sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_2 "%s: (sccp_channel_updateReceiveChannel) Close Receive Channel on channel %s\n", channel->currentDeviceId, channel->designator);
 		sccp_channel_closeReceiveChannel(channel, TRUE);
 	}
 	if (SCCP_RTP_STATUS_INACTIVE == channel->rtp.audio.receiveChannelState) {
-		sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_2 "%s: (sccp_channel_updateReceiveChannel) Open Receive Channel on channel %d\n", channel->currentDeviceId, channel->callid);
+		sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_2 "%s: (sccp_channel_updateReceiveChannel) Open Receive Channel on channel %s\n", channel->currentDeviceId, channel->designator);
 		sccp_channel_openReceiveChannel(channel);
 	}
 }
@@ -850,12 +850,12 @@ void sccp_channel_updateMediaTransmission(constChannelPtr channel)
 	/* \note this would indicate that it should also be possible to change codecs midflight ! */
 	/* \test should be able to do without this block to stopmediatransmission (Sometimes results in "OpenIngressChan: Potential buffer leak" (phone log) */
 	if (SCCP_RTP_STATUS_INACTIVE != channel->rtp.audio.mediaTransmissionState) {
-		sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_2 "%s: (updateMediaTransmission) Stop media transmission on channel %d\n", channel->currentDeviceId, channel->callid);
+		sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_2 "%s: (updateMediaTransmission) Stop media transmission on channel %s\n", channel->currentDeviceId, channel->designator);
 		sccp_channel_stopMediaTransmission(channel, TRUE);
 	}
 	if (SCCP_RTP_STATUS_INACTIVE == channel->rtp.audio.mediaTransmissionState) {
 		/*! \todo we should wait for the acknowledgement to get back. We don't have a function/procedure in place to do this at this moment in time (sccp_dev_send_wait) */
-		sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_2 "%s: (updateMediaTransmission) Start/Update media transmission on channel %d\n", channel->currentDeviceId, channel->callid);
+		sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_2 "%s: (updateMediaTransmission) Start/Update media transmission on channel %s\n", channel->currentDeviceId, channel->designator);
 		sccp_channel_startMediaTransmission(channel);
 	}
 }
@@ -2378,7 +2378,6 @@ void sccp_channel_transfer_complete(channelPtr sccp_destination_local_channel)
 //		}
 #endif
 	}
-
 	if (sccp_destination_local_channel->state == SCCP_CHANNELSTATE_RINGOUT) {
 		sccp_log((DEBUGCAT_CHANNEL + DEBUGCAT_CORE)) (VERBOSE_PREFIX_3 "%s: Blind transfer. Signalling ringing state to %s\n", d->id, pbx_channel_name(pbx_source_remote_channel));
 		pbx_indicate(pbx_source_remote_channel, AST_CONTROL_RINGING);					// Shouldn't this be ALERTING?
