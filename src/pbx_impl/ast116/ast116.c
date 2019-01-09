@@ -90,7 +90,6 @@ int sccp_astwrap_hangup(PBX_CHANNEL_TYPE * ast_channel);
 int sccp_astwrap_queue_control(const PBX_CHANNEL_TYPE * pbx_channel, enum ast_control_frame_type control);
 int sccp_astwrap_queue_control_data(const PBX_CHANNEL_TYPE * pbx_channel, enum ast_control_frame_type control, const void *data, size_t datalen);
 static int sccp_astwrap_devicestate(const char *data);
-static int sccp_astwrap_setNativeAudioFormats(constChannelPtr channel, skinny_codec_t codecs[], int length);
 static boolean_t sccp_astwrap_setWriteFormat(constChannelPtr channel, skinny_codec_t codec);
 static boolean_t sccp_astwrap_setReadFormat(constChannelPtr channel, skinny_codec_t codec);
 PBX_CHANNEL_TYPE *sccp_astwrap_findPickupChannelByExtenLocked(PBX_CHANNEL_TYPE * chan, const char *exten, const char *context);
@@ -662,7 +661,8 @@ static const char *asterisk_indication2str(int ind)
 
 static int sccp_astwrap_indicate(PBX_CHANNEL_TYPE * ast, int ind, const void *data, size_t datalen)
 {
-	int res = 0;
+	int res = 0;	/* indication supported */
+	sccp_log((DEBUGCAT_PBX | DEBUGCAT_CHANNEL | DEBUGCAT_INDICATE)) (VERBOSE_PREFIX_3 "SCCP: (pbx_indicate) start indicate '%s'\n", asterisk_indication2str(ind));
 
 	AUTO_RELEASE(sccp_channel_t, c , get_sccp_channel_from_pbx_channel(ast));
 	if (!c) {
@@ -677,24 +677,25 @@ static int sccp_astwrap_indicate(PBX_CHANNEL_TYPE * ast, int ind, const void *da
 		switch (ind) {
 			case AST_CONTROL_CONNECTED_LINE:
 				sccp_astwrap_connectedline(c, data, datalen);
-				res = 0;
 				break;
 			case AST_CONTROL_REDIRECTING:
 				sccp_astwrap_redirectedUpdate(c, data, datalen);
-				res = 0;
 				break;
 			default:
-				res = -1;
+				res = -1;	/* this indication is not supported */
 				break;
 		}
 		return res;
 	}
 
+	sccp_log((DEBUGCAT_PBX | DEBUGCAT_CHANNEL | DEBUGCAT_INDICATE)) (VERBOSE_PREFIX_1
+		"%s: (pbx_indicate) start indicate '%s' (%d) condition on channel %s (rtp_instance:%s, receiveChannelState:%d/%s, mediaTransmissionState:%d/%s)\n", 
+		DEV_ID_LOG(d), asterisk_indication2str(ind), ind, pbx_channel_name(ast), 
+		c->rtp.audio.instance ? "yes" : "no",
+		c->rtp.audio.receiveChannelState, codec2str(c->rtp.audio.readFormat), c->rtp.audio.mediaTransmissionState, codec2str(c->rtp.audio.writeFormat)
+	);
 
-	/* when the rtp media stream is open we will let asterisk emulate the tones */
-	res = (((c->rtp.audio.receiveChannelState != SCCP_RTP_STATUS_INACTIVE) || (d && d->earlyrtp)) ? -1 : 0);
-	sccp_log((DEBUGCAT_PBX | DEBUGCAT_CHANNEL | DEBUGCAT_INDICATE)) (VERBOSE_PREFIX_3 "%s: (pbx_indicate) start indicate '%s' (%d) condition on channel %s (readStat:%d, receiveChannelState:%d, rtp:%s, default res:%s (%d))\n", DEV_ID_LOG(d), asterisk_indication2str(ind), ind, pbx_channel_name(ast), c->rtp.audio.receiveChannelState, c->rtp.audio.receiveChannelState, (c->rtp.audio.instance) ? "yes" : "no", res ? "inband signaling" : "outofband signaling", res);
-
+	boolean_t inband_if_receivechannel = FALSE;
 	switch (ind) {
 		case AST_CONTROL_RINGING:
 			if (SKINNY_CALLTYPE_OUTBOUND == c->calltype && pbx_channel_state(c->owner) !=  AST_STATE_UP) {
@@ -724,13 +725,18 @@ static int sccp_astwrap_indicate(PBX_CHANNEL_TYPE * ast, int ind, const void *da
 				inband_if_receivechannel = TRUE;
 			}
 			break;
+
 		case AST_CONTROL_BUSY:
 			sccp_indicate(d, c, SCCP_CHANNELSTATE_BUSY);
 			iPbx.set_callstate(c, AST_STATE_BUSY);
+			inband_if_receivechannel = TRUE;
 			break;
+
 		case AST_CONTROL_CONGESTION:
 			sccp_indicate(d, c, SCCP_CHANNELSTATE_CONGESTION);
+			inband_if_receivechannel = TRUE;
 			break;
+
 		case AST_CONTROL_PROGRESS:
 			if (c->state != SCCP_CHANNELSTATE_CONNECTED && c->previousChannelState != SCCP_CHANNELSTATE_CONNECTED) {
 				sccp_indicate(d, c, SCCP_CHANNELSTATE_PROGRESS);
@@ -738,8 +744,9 @@ static int sccp_astwrap_indicate(PBX_CHANNEL_TYPE * ast, int ind, const void *da
 				// ORIGINATE() to SIP indicates PROGRESS after CONNECTED, causing issues with transfer
 				sccp_indicate(d, c, SCCP_CHANNELSTATE_CONNECTED);
 			}
-			res = -1;
+			inband_if_receivechannel = TRUE;
 			break;
+
 		case AST_CONTROL_PROCEEDING:
 			if (d->earlyrtp == SCCP_EARLYRTP_IMMEDIATE) {
 				/* 
@@ -755,40 +762,37 @@ static int sccp_astwrap_indicate(PBX_CHANNEL_TYPE * ast, int ind, const void *da
 				sccp_astwrap_setDialedNumber(c, c->dialedNumber);
 			}
 			sccp_indicate(d, c, SCCP_CHANNELSTATE_PROCEED);
-			res = -1;
+			inband_if_receivechannel = TRUE;
 			break;
+
 		case AST_CONTROL_SRCCHANGE:									/* ask our channel's remote source address to update */
+			sccp_log((DEBUGCAT_PBX | DEBUGCAT_INDICATE)) (VERBOSE_PREFIX_3 "SCCP: Source Change request\n");
 			if (c->rtp.audio.instance) {
 				ast_rtp_instance_change_source(c->rtp.audio.instance);
 			}
-			res = 0;
 			break;
 
-		case AST_CONTROL_SRCUPDATE:									/* semd control bit to force other side to update, their source address */
-			/* Source media has changed. */
+		case AST_CONTROL_SRCUPDATE:									/* send control bit to force other side to update, their source address */
 			sccp_log((DEBUGCAT_PBX | DEBUGCAT_INDICATE)) (VERBOSE_PREFIX_3 "SCCP: Source UPDATE request\n");
-
 			if (c->rtp.audio.instance) {
 				ast_rtp_instance_change_source(c->rtp.audio.instance);
 			}
-			res = 0;
 			break;
 
-			/* when the bridged channel hold/unhold the call we are notified here */
-		case AST_CONTROL_HOLD:
+		case AST_CONTROL_HOLD:										/* when the bridged channel hold/unhold the call we are notified here */
 			sccp_astwrap_moh_start(ast, (const char *) data, c->musicclass);
-			res = 0;
 			break;
+
 		case AST_CONTROL_UNHOLD:
 			sccp_astwrap_moh_stop(ast);
 
 			if (c->rtp.audio.instance) {
 				ast_rtp_instance_update_source(c->rtp.audio.instance);
 			}
-			res = 0;
 			break;
 
 		case AST_CONTROL_CONNECTED_LINE:
+			sccp_log((DEBUGCAT_PBX | DEBUGCAT_INDICATE)) (VERBOSE_PREFIX_3 "SCCP: Connected Line\n");
 			/* remarking out this code, as it is causing issues with callforward + FREEPBX,  the calling party will not hear the remote end ringing
 			 this patch was added to suppress 'double callwaiting tone', but channel PROD(-1) below is taking care of that already
 			*/
@@ -796,33 +800,30 @@ static int sccp_astwrap_indicate(PBX_CHANNEL_TYPE * ast, int ind, const void *da
 			//	sccp_channel_openReceiveChannel(c);
 			//}
 			sccp_astwrap_connectedline(c, data, datalen);
-			res = 0;
 			break;
 
 		case AST_CONTROL_TRANSFER:
-			ast_log(LOG_NOTICE, "%s: Ast Control Transfer: %d", c->designator, *(int *)data);
+			pbx_log(LOG_NOTICE, "%s: AST_CONTROL_TRANSFER: %d", c->designator, *(int *)data);
 			//sccp_astwrap_connectedline(c, data, datalen);
-			res = 0;
 			break;
 
 		case AST_CONTROL_REDIRECTING:
+			sccp_log((DEBUGCAT_PBX | DEBUGCAT_INDICATE)) (VERBOSE_PREFIX_3 "SCCP: Redirecting\n");
 			sccp_astwrap_redirectedUpdate(c, data, datalen);
 			sccp_indicate(d, c, c->state);
-			res = 0;
 			break;
 
 		case AST_CONTROL_VIDUPDATE:									/* Request a video frame update */
 #ifdef CS_SCCP_VIDEO
 			if (c->rtp.video.instance && d && sccp_device_isVideoSupported(d) && c->videomode != SCCP_VIDEO_MODE_OFF) {
 				d->protocol->sendFastPictureUpdate(d, c);
-				res = 0;
 			} else 
 #endif
 			{
-				res = -1;
+				res = -1;	/* this indication is not supported */
 			}
 			break;
-#ifdef CS_AST_CONTROL_INCOMPLETE
+
 		case AST_CONTROL_INCOMPLETE:									/*!< Indication that the extension dialed is incomplete */
 			/* \todo implement dial continuation by:
 			 *  - display message incomplete number
@@ -841,9 +842,22 @@ static int sccp_astwrap_indicate(PBX_CHANNEL_TYPE * ast, int ind, const void *da
 				}
 			}
 			*/
-			res = 0;
+			inband_if_receivechannel = TRUE;
 			break;
-#endif
+
+		case AST_CONTROL_AOC:										// Advice of Charge
+			break;
+
+		case AST_CONTROL_UPDATE_RTP_PEER: 								// Absorb this since it is handled by the bridge
+			sccp_log((DEBUGCAT_PBX | DEBUGCAT_INDICATE)) (VERBOSE_PREFIX_3 "SCCP: Update RTP Peer\n");
+			break;
+
+		case AST_CONTROL_FLASH: 									// We don't currently handle AST_CONTROL_FLASH here, but it is expected, so we don't need to warn either.
+			break;
+
+		case AST_CONTROL_T38_PARAMETERS:								// No T38 Fax Support
+			break;
+
 		case AST_CONTROL_PVT_CAUSE_CODE:
 			{
 				/*! \todo This would also be a good moment to update the c->requestHangup to requestQueueHangup */
@@ -851,29 +865,37 @@ static int sccp_astwrap_indicate(PBX_CHANNEL_TYPE * ast, int ind, const void *da
 
 				sccp_log((DEBUGCAT_PBX | DEBUGCAT_INDICATE)) (VERBOSE_PREFIX_3 "%s: hangup cause set: %d\n", c->designator, hangupcause);
 			}
-			res = -1;
+			res = -1;										// Return -1 so that asterisk core will correctly set up hangupcauses.
 			break;
+
 		case AST_CONTROL_MASQUERADE_NOTIFY:
-			res = -1;
+			res = -1;										// Return -1 so that asterisk core will correctly set up hangupcauses.
 			break;
-		case -1:											// Asterisk prod the channel
+
+		case -1:											// Asterisk prod the channel /* STOP_TONE */
 			if (	c->line && 
 				c->state > SCCP_GROUPED_CHANNELSTATE_DIALING && 
 				c->calltype == SKINNY_CALLTYPE_OUTBOUND && 
-				c->rtp.audio.receiveChannelState == SCCP_RTP_STATUS_INACTIVE &&
 				!ast_channel_hangupcause(ast)
 			) {
-				sccp_channel_openReceiveChannel(c);
 				uint8_t instance = sccp_device_find_index_for_line(d, c->line->name);
 				sccp_dev_stoptone(d, instance, c->callid);
+				if (c->rtp.audio.receiveChannelState == SCCP_RTP_STATUS_INACTIVE) {
+					sccp_channel_openReceiveChannel(c);
+				}
 			}
-			res = -1;
+			inband_if_receivechannel = TRUE;
 			break;
+
 		default:
 			sccp_log((DEBUGCAT_PBX | DEBUGCAT_INDICATE)) (VERBOSE_PREFIX_3 "%s: (pbx_indicate) Don't know how to indicate condition '%s' (%d)\n", DEV_ID_LOG(d), asterisk_indication2str(ind), ind);
+			res = -1;	/* this indication is not supported */
 			break;
 	}
-	sccp_log((DEBUGCAT_PBX | DEBUGCAT_INDICATE)) (VERBOSE_PREFIX_2 "%s: (pbx_indicate) finish: send indication '%s' (%d)\n", DEV_ID_LOG(d), res ? "inband signaling" : "outofband signaling", res);
+	if (inband_if_receivechannel && c->rtp.audio.receiveChannelState != SCCP_RTP_STATUS_INACTIVE) {
+		res = -1;
+	}
+	sccp_log((DEBUGCAT_PBX | DEBUGCAT_INDICATE)) (VERBOSE_PREFIX_2 "%s: (pbx_indicate) finish: send indication (res:%d)\n", DEV_ID_LOG(d), res);
 	return res;
 }
 
@@ -2480,51 +2502,57 @@ static int sccp_astwrap_setPhoneRTPAddress(const struct sccp_rtp *rtp, const str
 	return res;
 }
 
-static int sccp_astwrap_setNativeAudioFormats(constChannelPtr channel, skinny_codec_t codecs[], int length)
+static int sccp_astwrap_setNativeAudioFormats(constChannelPtr channel, skinny_codec_t codecs[])
 {
 	if (!channel || !channel->owner || !ast_channel_nativeformats(channel->owner)) {
 		pbx_log(LOG_ERROR, "SCCP: (setNativeAudioFormats) no channel provided!\n");
 		return 0;
 	}
+	PBX_CHANNEL_TYPE *ast = channel->owner;
+	
 	struct ast_format_cap *caps = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!caps) {
-		return FALSE;
+        	return 0;
 	}
-	ast_format_cap_append_from_cap(caps, ast_channel_nativeformats(channel->owner), AST_MEDIA_TYPE_UNKNOWN);
+	ast_format_cap_append_from_cap(caps, ast_channel_nativeformats(ast), AST_MEDIA_TYPE_UNKNOWN);
 	ast_format_cap_remove_by_type(caps, AST_MEDIA_TYPE_AUDIO);
 	pbx_format_cap_append_skinny(caps, codecs);
-
-	ast_channel_lock(channel->owner);
-	ast_channel_nativeformats_set(channel->owner, caps);
-	ast_channel_unlock(channel->owner);
+	
+	ast_channel_lock(ast);
+	ast_channel_nativeformats_set(ast, caps);
+	ast_channel_unlock(ast);
 	ao2_cleanup(caps);
 
-	//struct ast_str *codec_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
-	//sccp_log((DEBUGCAT_RTP | DEBUGCAT_CODEC)) (VERBOSE_PREFIX_3 "%s: (setNativeAudioFormats) %s\n", channel->designator, ast_format_cap_get_names(ast_channel_nativeformats(channel->owner), &codec_buf));
+	struct ast_str *codec_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
+	sccp_log((DEBUGCAT_RTP | DEBUGCAT_CODEC)) (VERBOSE_PREFIX_3 "%s: (setNativeAudioFormats) %s\n", channel->designator, ast_format_cap_get_names(ast_channel_nativeformats(ast), &codec_buf));
+
 	return 1;
 }
 
-static int sccp_astwrap_setNativeVideoFormats(constChannelPtr channel, skinny_codec_t codec)
+static int sccp_astwrap_setNativeVideoFormats(constChannelPtr channel, skinny_codec_t codecs[])
 {
 	if (!channel || !channel->owner || !ast_channel_nativeformats(channel->owner)) {
-		pbx_log(LOG_ERROR, "SCCP: (setNativeVideoFormats) no channel provided!\n");
+		pbx_log(LOG_ERROR, "SCCP: (setNativeAudioFormats) no channel provided!\n");
 		return 0;
 	}
+	PBX_CHANNEL_TYPE *ast = channel->owner;
+	
 	struct ast_format_cap *caps = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!caps) {
-		return FALSE;
+        	return 0;
 	}
-	ast_format_cap_append_from_cap(caps, ast_channel_nativeformats(channel->owner), AST_MEDIA_TYPE_UNKNOWN);
+	ast_format_cap_append_from_cap(caps, ast_channel_nativeformats(ast), AST_MEDIA_TYPE_UNKNOWN);
 	ast_format_cap_remove_by_type(caps, AST_MEDIA_TYPE_VIDEO);
-	skinny_codec_t codecs[SKINNY_MAX_CAPABILITIES] = {codec, 0};
 	pbx_format_cap_append_skinny(caps, codecs);
-
-	ast_channel_lock(channel->owner);
-	ast_channel_nativeformats_set(channel->owner, caps);
-	ast_channel_unlock(channel->owner);
+	
+	ast_channel_lock(ast);
+	ast_channel_nativeformats_set(ast, caps);
+	ast_channel_unlock(ast);
 	ao2_cleanup(caps);
-	//struct ast_str *codec_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
-	//sccp_log((DEBUGCAT_RTP | DEBUGCAT_CODEC)) (VERBOSE_PREFIX_3 "%s: (setNativeAudioFormats) %s\n", channel->designator, ast_format_cap_get_names(ast_channel_nativeformats(channel->owner), &codec_buf));
+
+	struct ast_str *codec_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
+	sccp_log((DEBUGCAT_RTP | DEBUGCAT_CODEC)) (VERBOSE_PREFIX_3 "%s: (setNativeVideoFormats) %s\n", channel->designator, ast_format_cap_get_names(ast_channel_nativeformats(ast), &codec_buf));
+
 	return 1;
 }
 
