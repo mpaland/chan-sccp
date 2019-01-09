@@ -11,6 +11,11 @@
 #include "sccp_utils.h"
 #include "sccp_channel.h"
 
+
+/*
+ * references: https://en.wikipedia.org/wiki/RTP_audio_video_profile
+ * --DD-- We need an extra column, specifying the RFC number, needed for MultiMediaReceive/MultiMediaTransmission->lel_payload_rfc_number;
+ */
 const struct skinny_codec skinny_codecs[] = {
 	/* *INDENT-OFF* */
 	{SKINNY_CODEC_NONE,		SKINNY_CODEC_TYPE_UNKNOWN, 	"",		"",		"No codec", 				NULL,		0,	0,	-1},	//payload unknown
@@ -20,7 +25,11 @@ const struct skinny_codec skinny_codecs[] = {
 	{SKINNY_CODEC_GSM_FULLRATE,	SKINNY_CODEC_TYPE_AUDIO, 	"gsm",		"gsm/full",	"GSM Full Rate", 			NULL,		8000,	2,	3},
 	{SKINNY_CODEC_GSM_HALFRATE,	SKINNY_CODEC_TYPE_AUDIO, 	"gsm",		"gsm/half",	"GSM Half Rate", 			NULL,		8000,	1,	3},
 	{SKINNY_CODEC_GSM_ENH_FULLRATE,	SKINNY_CODEC_TYPE_AUDIO,	"gsm",		"gsm/enh",	"GSM Enhanced Full Rate",		NULL,		8000,	2,	3},
-	{SKINNY_CODEC_WIDEBAND_256K,	SKINNY_CODEC_TYPE_AUDIO, 	"slin16",	"slin16",	"Wideband 256k", 			"L16",		16000,	3,	25},
+	{SKINNY_CODEC_WIDEBAND_256K,	SKINNY_CODEC_TYPE_AUDIO, 	"slin16",	"slin16",	"Wideband 256k", 			"L16",		16000,	3,	25},	// --DD-- 25==0x019, This is an exception !
+																							// This one is statically mapped (ie: defined below <77)
+																							// So we need to replace 118 with 25 for asterisk to work
+																							// Only >77 RTPPayloads are dynamic
+																							// It also works when set to 10/11 (see RFC reference)
 	{SKINNY_CODEC_GSM,		SKINNY_CODEC_TYPE_AUDIO, 	"gsm",		"gsm",		"GSM", 					NULL,		8000,	1,	3},
 	{SKINNY_CODEC_ACTIVEVOICE,	SKINNY_CODEC_TYPE_AUDIO, 	"activevoice",	"activevoice",	"ActiveVoice", 				NULL,		8000,	1,	-1},	//payload unknown
 	{SKINNY_CODEC_G711_ALAW_64K,	SKINNY_CODEC_TYPE_AUDIO, 	"alaw",		"alaw/64k",	"G.711 A-law 64k", 			NULL,		8000,	2,	8},
@@ -56,7 +65,7 @@ const struct skinny_codec skinny_codecs[] = {
 	{SKINNY_CODEC_MP4A_LATM_NA,	SKINNY_CODEC_TYPE_AUDIO,	"mp4a_latm_na",	"mp4a_latm_na",	"mp4a latm nak",			NULL,		8000,	1,	-1},
 	{SKINNY_CODEC_AMR,		SKINNY_CODEC_TYPE_AUDIO,	"amr",		"amr",		"amr",					NULL,		8000,	1,	-2},	// --DD-- please check
 	{SKINNY_CODEC_AMR_WB,		SKINNY_CODEC_TYPE_AUDIO,	"amr_wb",	"amr_wb",	"amr_wb",				NULL,		8000,	1,	-2},	// --DD-- please check
-	{SKINNY_CODEC_H261,		SKINNY_CODEC_TYPE_VIDEO,	"h261",		"h261",		"H.261", 				NULL,		90000,	1,	34},
+	{SKINNY_CODEC_H261,		SKINNY_CODEC_TYPE_VIDEO,	"h261",		"h261",		"H.261", 				NULL,		90000,	1,	31},
 	{SKINNY_CODEC_H263,		SKINNY_CODEC_TYPE_VIDEO,	"h263",		"h263",		"H.263", 				"H263",		90000,	1,	34},
 	{SKINNY_CODEC_H263P,		SKINNY_CODEC_TYPE_VIDEO,	"h263",		"h263p",	"Vieo H.263+", 				NULL,		90000,	1,	98},
 	{SKINNY_CODEC_H264,		SKINNY_CODEC_TYPE_VIDEO,	"h264",		"h264",		"H.264", 				"H264",		90000,	1,	103},
