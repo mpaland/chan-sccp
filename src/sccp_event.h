@@ -18,6 +18,9 @@ typedef struct sccp_event {
 			sccp_line_t *line;									/*!< SCCP Line (required) */
 		} lineCreated;											/*!< Event Line Created Structure */
 		struct {
+			sccp_line_t *line;									/*!< SCCP Line (required) */
+		} lineDestroyed;										/*!< Event Line Created Structure */
+		struct {
 			sccp_device_t *device;									/*!< SCCP Device (required) */
 		} deviceRegistered;										/*!< Event Device Registered Structure */
 		struct {
@@ -39,6 +42,11 @@ typedef struct sccp_event {
 			char *str;
 		} TestEvent;											/*!< Event feature changed Structure */
 #endif
+		struct {
+			sccp_line_t *line;
+			int newmsgs;
+			int oldmsgs;
+		} mwiChanged;
 	} event;												/*!< SCCP Event Data Union */
 	sccp_event_type_t type;											/*!< Event Type */
 } sccp_event_t;													/*!< SCCP Event Structure */

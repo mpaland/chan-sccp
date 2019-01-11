@@ -25,7 +25,6 @@
 #include "sccp_line.h"
 #include "sccp_session.h"
 #include "sccp_indicate.h"
-#include "sccp_mwi.h"
 #include "sccp_utils.h"
 #include "sccp_atomic.h"
 #include "sccp_devstate.h"
@@ -2213,6 +2212,7 @@ void sccp_dev_postregistration(void *data)
 	sccp_dev_check_displayprompt(d);
 
 	d->mwilight = 0;
+/*
 	for (instance = SCCP_FIRST_LINEINSTANCE; instance < d->lineButtons.size; instance++) {
 		if (d->lineButtons.instance[instance]) {
 			AUTO_RELEASE(sccp_linedevices_t, linedevice , sccp_linedevice_retain(d->lineButtons.instance[instance]));
@@ -2221,7 +2221,7 @@ void sccp_dev_postregistration(void *data)
 			}
 		}
 	}
-	sccp_mwi_check(d);
+*/
 #ifdef CS_SCCP_PARK
 	sccp_buttonconfig_t *config = NULL;
 	SCCP_LIST_LOCK(&d->buttonconfig);

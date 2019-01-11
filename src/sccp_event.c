@@ -85,6 +85,13 @@ void sccp_event_destroy(sccp_event_t * event)
 			sccp_line_release(&event->event.lineCreated.line);								/* explicit release */
 			break;
 
+		case SCCP_EVENT_LINE_CHANGED:
+			break;
+
+		case SCCP_EVENT_LINE_DESTROYED:
+			sccp_line_release(&event->event.lineDestroyed.line);								/* explicit release */
+			break;
+
 		case SCCP_EVENT_DEVICE_ATTACHED:
 		case SCCP_EVENT_DEVICE_DETACHED:
 			sccp_linedevice_release(&event->event.deviceAttached.linedevice);						/* explicit release */
@@ -104,9 +111,6 @@ void sccp_event_destroy(sccp_event_t * event)
 			}
 			break;
 
-		case SCCP_EVENT_LINE_CHANGED:
-		case SCCP_EVENT_LINE_DELETED:
-			break;
 #if CS_TEST_FRAMEWORK
 		case SCCP_EVENT_TEST:
 			pbx_log(LOG_NOTICE, "SCCP: TestEvent Destroy Event\n");
@@ -115,6 +119,9 @@ void sccp_event_destroy(sccp_event_t * event)
 			}
 			break;
 #endif
+		case SCCP_EVENT_MWI_CHANGED:
+			sccp_line_release(&event->event.mwiChanged.line);								/* explicit release */
+			
 		case SCCP_EVENT_TYPE_SENTINEL:
 		case SCCP_EVENT_NULL:
 			break;

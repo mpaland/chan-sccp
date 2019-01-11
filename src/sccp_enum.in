@@ -162,7 +162,7 @@ strenum event_type {
         SCCP_EVENT_NULL,				=0,	"Null Event / To be removed",
         SCCP_EVENT_LINE_CREATED,			=1<<0,	"Line Created",
         SCCP_EVENT_LINE_CHANGED,			,	"Line Changed",
-        SCCP_EVENT_LINE_DELETED,			,	"Line Deleted",
+        SCCP_EVENT_LINE_DESTROYED,			,	"Line Destroyed",
         SCCP_EVENT_DEVICE_ATTACHED,			,	"Device Attached",
         SCCP_EVENT_DEVICE_DETACHED,			,	"Device Detached",
         SCCP_EVENT_DEVICE_PREREGISTERED,		,	"Device Preregistered",
@@ -173,6 +173,7 @@ strenum event_type {
 #ifdef CS_TEST_FRAMEWORK
         SCCP_EVENT_TEST,				,	"Test Event",
 #endif
+	SCCP_EVENT_MWI_CHANGED,				,	"Mwi Event",
 }
 
 enum parkresult {

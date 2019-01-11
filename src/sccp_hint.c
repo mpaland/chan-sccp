@@ -236,7 +236,9 @@ void sccp_hint_module_stop(void)
 		SCCP_LIST_LOCK(&sccp_hint_subscriptions);
 		while ((hint = SCCP_LIST_REMOVE_HEAD(&sccp_hint_subscriptions, list))) {
 #ifdef CS_USE_ASTERISK_DISTRIBUTED_DEVSTATE
-			pbx_event_unsubscribe(hint->device_state_sub);
+			if (hint->device_state_sub) {
+				pbx_event_unsubscribe(hint->device_state_sub);
+			}
 #endif
 			ast_extension_state_del(hint->stateid, NULL);
 
@@ -631,11 +633,21 @@ static sccp_hint_list_t *sccp_hint_create(char *hint_exten, char *hint_context)
 
 #ifdef CS_USE_ASTERISK_DISTRIBUTED_DEVSTATE
 	/* subscripbe to the distributed hint event */
-#if ASTERISK_VERSION_GROUP >= 112
+#if CS_AST_HAS_STASIS
 	struct stasis_topic *devstate_hint_dialplan = ast_device_state_topic(hint->hint_dialplan);
-	hint->device_state_sub = stasis_subscribe(devstate_hint_dialplan, sccp_hint_distributed_devstate_cb, hint);
-#else
+	if (devstate_hint_dialplan) {
+		hint->device_state_sub = stasis_subscribe(devstate_hint_dialplan, sccp_hint_distributed_devstate_cb, hint);
+//#  if CS_AST_HAS_STASIS_SUBSCRIPTION_SET_FILTER
+//		if (hint->device_state_sub)
+//			stasis_subscription_accept_message_type((hint->device_state_sub)->event_sub, ast_device_state_message_type());
+//			stasis_subscription_set_filter((hint->device_state_sub)->event_sub, STASIS_SUBSCRIPTION_FILTER_SELECTIVE);
+//		}
+//#  endif
+	}
+#elif CS_AST_HAS_EVENT
 	hint->device_state_sub = pbx_event_subscribe(AST_EVENT_DEVICE_STATE_CHANGE, sccp_hint_distributed_devstate_cb, "sccp_hint_distributed_devstate_cb", hint, AST_EVENT_IE_DEVICE, AST_EVENT_IE_PLTYPE_STR, hint->hint_dialplan, AST_EVENT_IE_END);
+#else
+	pbx_log(LOG_ERROR, "SCCP: distributed devstate not supported\n");
 #endif
 #endif
 

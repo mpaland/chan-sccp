@@ -25,7 +25,6 @@ SCCP_FILE_VERSION(__FILE__, "");
 static void regcontext_exten(sccp_line_t * l, struct subscriptionId *subscriptionId, int onoff);
 int __sccp_line_destroy(const void *ptr);
 int __sccp_lineDevice_destroy(const void *ptr);
-int sccp_line_destroy(const void *ptr);
 
 /*!
  * \brief run before reload is start on lines
@@ -179,11 +178,6 @@ void sccp_line_removeFromGlobals(sccp_line_t * line)
 
 		sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_3 "Removed line '%s' from Glob(lines)\n", removed_line->name);
 
-		//sccp_event_t event = {{{0}}};
-		//event.type = SCCP_EVENT_LINE_DELETED;
-		//event.event.lineCreated.line = sccp_line_retain(removed_line);
-		//sccp_event_fire(&event);
-		
 		sccp_line_release(&removed_line);								/* explicit release */
 	} else {
 		pbx_log(LOG_ERROR, "Removing null from global line list is not allowed!\n");
@@ -264,7 +258,12 @@ void sccp_line_clean(sccp_line_t * l, boolean_t remove_from_global)
 	sccp_line_kill_channels(l);
 	sccp_line_removeDevice(l, NULL);									// removing all devices from this line.
 	if (remove_from_global) {
-		sccp_line_destroy(l);
+		sccp_event_t event = {{{0}}};
+		event.type = SCCP_EVENT_LINE_DESTROYED;
+		event.event.lineCreated.line = sccp_line_retain(l);
+		sccp_event_fire(&event);
+
+		sccp_line_removeFromGlobals(l);									// final release
 	}
 }
 
@@ -297,7 +296,7 @@ int __sccp_line_destroy(const void *ptr)
 	{
 		SCCP_LIST_LOCK(&l->mailboxes);
 		while ((mailbox = SCCP_LIST_REMOVE_HEAD(&l->mailboxes, list))) {
-			sccp_mwi_unsubscribeMailbox(mailbox);
+			//sccp_mwi_unsubscribeMailbox(mailbox);
 			if (mailbox->mailbox) {
 				sccp_free(mailbox->mailbox);
 			}
@@ -361,23 +360,6 @@ int __sccp_lineDevice_destroy(const void *ptr)
 	if (linedevice->device) {
 		sccp_device_release(&linedevice->device);					/* explicit release of device retained in linedevice */
 	}
-	return 0;
-}
-
-/*!
- * \brief Free a Line as scheduled command
- * \param ptr SCCP Line Pointer
- * \return success as int
- *
- * \callgraph
- * \callergraph
- * 
- */
-int sccp_line_destroy(const void *ptr)
-{
-	sccp_line_t *l = (sccp_line_t *) ptr;
-
-	sccp_line_removeFromGlobals(l);										// final release
 	return 0;
 }
 
@@ -804,6 +786,60 @@ sccp_channelstate_t sccp_line_getDNDChannelState(sccp_line_t * line)
 	return state;
 }
 #endif
+
+/*=================================================================================== MWI EVENT HANDLING ==============*/
+static void sccp_line_update_mwistate(sccp_line_t *l)
+{
+}
+
+static void sccp_line_mwiChanged(const sccp_event_t * event)
+{
+	if (!event || !event->event.mwiChanged.line) {
+		pbx_log(LOG_ERROR, "(lineCreatedEvent) event or line not provided\n");
+		return;
+	}
+	
+	sccp_line_t *l = event->event.lineCreated.line;
+	
+	int previousNewMsgs = l->voicemailStatistic.newmsgs;
+	int previousOldMsgs = l->voicemailStatistic.oldmsgs;
+	l->voicemailStatistic.newmsgs = event->event.mwiChanged.newmsgs;
+	l->voicemailStatistic.oldmsgs = event->event.mwiChanged.oldmsgs;
+	
+	// toggle line iconStatus
+	// toggle line messageStatus
+	sccp_line_update_mwistate(l);
+	
+	sccp_linedevices_t *linedevice = NULL;
+	SCCP_LIST_LOCK(&l->devices);
+	SCCP_LIST_TRAVERSE(&l->devices, linedevice, list) {
+		AUTO_RELEASE(sccp_device_t, d, sccp_device_retain(linedevice->device));
+		if (d) {
+			d->voicemailStatistic.newmsgs = l->voicemailStatistic.newmsgs - previousNewMsgs;
+			d->voicemailStatistic.oldmsgs = l->voicemailStatistic.oldmsgs - previousOldMsgs;
+
+			//sccp_device_update_mwistate(d);
+				//boolean_t lightStatus = d->voicemailStatistic.newmsgs;
+				//boolean_t messageStatus = (d->voicemailStatistic.newmsgs || d->voicemailStatistic.oldmsgs)
+				// toggle device lightStatus;
+				// except if !mwioncall and deviceStatus is !onhook
+				// toggle device messageStatus;
+		}
+	}
+	SCCP_LIST_UNLOCK(&l->devices);
+}
+
+/* Module Init */
+static void __attribute__((constructor)) sccp_line_module_init(void)
+{
+	sccp_event_subscribe(SCCP_EVENT_MWI_CHANGED, sccp_line_mwiChanged, TRUE);
+}
+
+static void __attribute__((destructor)) sccp_line_module_destroy(void)
+{
+	sccp_event_unsubscribe(SCCP_EVENT_MWI_CHANGED, sccp_line_mwiChanged);
+}
+
 
 /*=================================================================================== FIND FUNCTIONS ==============*/
 

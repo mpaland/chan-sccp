@@ -22,8 +22,8 @@
 #include "sccp_device.h"
 #include "sccp_globals.h"
 #include "sccp_line.h"
-#include "sccp_mwi.h"		// use __constructor__ to remove this entry
 #include "sccp_netsock.h"
+#include "sccp_mwi.h"
 #include "sccp_session.h"	// use __constructor__ to remove this entry
 #include "sccp_utils.h"
 #include "sccp_hint.h"		// use __constructor__ to remove this entry
@@ -116,7 +116,6 @@ boolean_t sccp_prePBXLoad(void)
 #if defined(CS_DEVSTATE_FEATURE)
 	sccp_devstate_module_start();
 #endif
-	sccp_mwi_module_start();
 	sccp_hint_module_start();
 	sccp_manager_module_start();
 #ifdef CS_SCCP_CONFERENCE
@@ -271,6 +270,9 @@ int sccp_preUnload(void)
 	}
 	usleep(100);												// wait for events to finalize
 
+	iVoicemail.stopModule();
+	sccp_event_module_stop();
+
 	/* stop services */
 	sccp_session_terminateAll();
 	sccp_manager_module_stop();
@@ -282,7 +284,6 @@ int sccp_preUnload(void)
 #endif
 	sccp_softkey_clear();
 	sccp_hint_module_stop();
-	sccp_event_module_stop();
 	sccp_threadpool_destroy(GLOB(general_threadpool));
 	sccp_refcount_destroy();
 
