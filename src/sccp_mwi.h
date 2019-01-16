@@ -15,8 +15,6 @@
  * \brief SCCP Mailbox Structure
  */
 struct sccp_mailbox {
-	char *mailbox;												/*!< \todo remove / replace with uniqueid */
-	char *context;												/*!< \todo remote / replace with uniqueid */
 	char uniqueid[SCCP_MAX_MAILBOX_UNIQUEID];
 	SCCP_LIST_ENTRY (sccp_mailbox_t) list;									/*!< Mailbox Linked List Entry */
 };														/*!< SCCP Mailbox Structure */

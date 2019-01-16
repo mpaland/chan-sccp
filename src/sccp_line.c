@@ -298,12 +298,6 @@ int __sccp_line_destroy(const void *ptr)
 		SCCP_LIST_LOCK(&l->mailboxes);
 		while ((mailbox = SCCP_LIST_REMOVE_HEAD(&l->mailboxes, list))) {
 			//sccp_mwi_unsubscribeMailbox(mailbox);
-			if (mailbox->mailbox) {
-				sccp_free(mailbox->mailbox);
-			}
-			if (mailbox->context) {
-				sccp_free(mailbox->context);
-			}
 			sccp_free(mailbox);
 		}
 		SCCP_LIST_UNLOCK(&l->mailboxes);
@@ -786,6 +780,27 @@ sccp_channelstate_t sccp_line_getDNDChannelState(sccp_line_t * line)
 	return state;
 }
 #endif
+
+/*=================================================================================== MWI EVENT HANDLING ==============*/
+void sccp_line_setMWI(linePtr line, int newmsgs, int oldmsgs)
+{
+	sccp_log((DEBUGCAT_MWI)) (VERBOSE_PREFIX_3 "%s: (sccp_line_setMWI), newmsgs:%d, oldmsgs:%d\n", line->name, newmsgs, oldmsgs);
+	if (line->voicemailStatistic.newmsgs != newmsgs || line->voicemailStatistic.oldmsgs != oldmsgs) {
+		line->voicemailStatistic.newmsgs = newmsgs;
+		line->voicemailStatistic.oldmsgs = oldmsgs;
+	}
+}
+void sccp_line_indicateMWI(constLineDevicePtr linedevice)
+{
+	AUTO_RELEASE(sccp_device_t, d, sccp_device_retain(linedevice->device));
+	AUTO_RELEASE(sccp_line_t, l, sccp_line_retain(linedevice->line));
+	if (l && d) {
+		sccp_log((DEBUGCAT_MWI)) (VERBOSE_PREFIX_3 "%s: (sccp_line_indicateMWI) Set voicemail lamp:%s on device:%s\n", l->name, 
+			l->voicemailStatistic.newmsgs ? "on" : "off", d->id);
+		sccp_device_setLamp(d, SKINNY_STIMULUS_VOICEMAIL, linedevice->lineInstance, 
+			l->voicemailStatistic.newmsgs ? d->mwilamp : SKINNY_LAMP_OFF);
+	}
+}
 
 /*=================================================================================== FIND FUNCTIONS ==============*/
 

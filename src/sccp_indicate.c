@@ -67,6 +67,11 @@ void __sccp_indicate(const sccp_device_t * const maybe_device, sccp_channel_t * 
 	sccp_channel_setChannelstate(c, state);
 	sccp_callinfo_t * const ci = sccp_channel_getCallInfo(c);
 
+	if (SCCP_CHANNELSTATE_Idling(state) || SCCP_CHANNELSTATE_IsTerminating(state)) {
+		sccp_device_indicateMWI(d);
+	} else {
+		sccp_device_suppressMWI(d);
+	}
 	switch (state) {
 		case SCCP_CHANNELSTATE_DOWN:
 			{
@@ -190,7 +195,6 @@ void __sccp_indicate(const sccp_device_t * const maybe_device, sccp_channel_t * 
 
 				sccp_device_sendcallstate(d, lineInstance, c->callid, SKINNY_CALLSTATE_RINGIN, SKINNY_CALLPRIORITY_LOW, SKINNY_CALLINFO_VISIBILITY_DEFAULT);
 				iCallInfo.Send(ci, c->callid, c->calltype, lineInstance, d, TRUE);
-
 				sccp_device_setLamp(d, SKINNY_STIMULUS_LINE, lineInstance, SKINNY_LAMP_BLINK);
 
 				if ((d->dndFeature.enabled && d->dndFeature.status == SCCP_DNDMODE_SILENT && c->ringermode != SKINNY_RINGTYPE_URGENT)) {

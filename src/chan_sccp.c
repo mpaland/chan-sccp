@@ -113,6 +113,7 @@ boolean_t sccp_prePBXLoad(void)
 	GLOB(general_threadpool) = sccp_threadpool_init(THREADPOOL_MIN_SIZE);
 
 	sccp_event_module_start();
+	iVoicemail.startModule();
 #if defined(CS_DEVSTATE_FEATURE)
 	sccp_devstate_module_start();
 #endif
@@ -268,9 +269,9 @@ int sccp_preUnload(void)
 	if (SCCP_RWLIST_EMPTY(&GLOB(lines))) {
 		SCCP_RWLIST_HEAD_DESTROY(&GLOB(lines));
 	}
+	iVoicemail.stopModule();
 	usleep(100);												// wait for events to finalize
 
-	iVoicemail.stopModule();
 	sccp_event_module_stop();
 
 	/* stop services */

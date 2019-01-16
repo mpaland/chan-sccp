@@ -23,11 +23,13 @@ typedef struct sccp_msg sccp_msg_t;
 #define devicePtr sccp_device_t *const
 #define linePtr sccp_line_t *const
 #define channelPtr sccp_channel_t *const
+#define lineDevicePtr sccp_linedevices_t *const;
 #define conferencePtr sccp_conference_t *const
 #define constSessionPtr const sccp_session_t *const
 #define constDevicePtr const sccp_device_t *const
 #define constLinePtr const sccp_line_t *const
 #define constChannelPtr const sccp_channel_t *const
+#define constLineDevicePtr const sccp_linedevices_t *const
 #define constConferencePtr const sccp_conference_t *const
 #define messagePtr sccp_msg_t * const
 #define constMessagePtr const sccp_msg_t * const

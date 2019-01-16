@@ -3791,7 +3791,6 @@ static int module_reload(void)
 }
 
 #if defined(__cplusplus) || defined(c_plusplus)
-
 static struct ast_module_info __mod_info = {
 	NULL,
 	load_module,
@@ -3821,8 +3820,16 @@ static void __attribute__ ((destructor)) __unreg_module(void)
 static const __attribute__ ((unused))
 struct ast_module_info *ast_module_info = &__mod_info;
 #else
-
-AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_LOAD_ORDER, SCCP_VERSIONSTR,.load = load_module,.unload = unload_module,.reload = module_reload,.load_pri = AST_MODPRI_DEFAULT,.nonoptreq = "chan_local");
+AST_MODULE_INFO(
+	ASTERISK_GPL_KEY,
+	AST_MODFLAG_LOAD_ORDER,
+	SCCP_VERSIONSTR,
+	.load = load_module,
+	.unload = unload_module,
+	.reload = module_reload,
+	.load_pri = AST_MODPRI_DEFAULT,
+	.nonoptreq = "chan_local"
+);
 #endif
 
 PBX_CHANNEL_TYPE *sccp_astwrap_findPickupChannelByExtenLocked(PBX_CHANNEL_TYPE * chan, const char *exten, const char *context)

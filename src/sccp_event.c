@@ -108,7 +108,7 @@ void sccp_event_destroy(sccp_event_t * event)
 #if CS_TEST_FRAMEWORK
 		case SCCP_EVENT_TEST:
 			pbx_log(LOG_NOTICE, "SCCP: TestEvent Destroy Event\n");
-			if (event->event.TestEvent.str) {
+			if (event->TestEvent.str) {
 				sccp_free(event->TestEvent.str);
 			}
 			break;
@@ -365,8 +365,8 @@ static char *_sccp_event_TestStr = "^YTHnjMK<MJHBgF";
 static uint32_t _sccp_event_TestEventReceived = 0;
 
 static void sccp_event_testListener(const sccp_event_t * event) {
-	pbx_log(LOG_NOTICE, "SCCP: Test Event Listener, received event: %p, with type:%s, payload:[value:%d, str:%s]\n", event, sccp_event_type2str(event->type), event->event.TestEvent.value, event->event.TestEvent.str);
-	if (event->event.TestEvent.value == _sccp_event_TestValue && sccp_strequals(event->event.TestEvent.str, _sccp_event_TestStr)) {
+	pbx_log(LOG_NOTICE, "SCCP: Test Event Listener, received event: %p, with type:%s, payload:[value:%d, str:%s]\n", event, sccp_event_type2str(event->type), event->TestEvent.value, event->TestEvent.str);
+	if (event->TestEvent.value == _sccp_event_TestValue && sccp_strequals(event->TestEvent.str, _sccp_event_TestStr)) {
 		pbx_log(LOG_NOTICE, "SCCP: Test Event Listener, Received Content validated: Returning: %d\n", ++_sccp_event_TestEventReceived);
 		return;
 	}

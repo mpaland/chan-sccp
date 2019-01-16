@@ -637,6 +637,7 @@ sccp_device_t *sccp_device_create(const char *id)
 	d->getDtmfMode = sccp_device_getDtfmMode;
 	d->copyStr2Locale = sccp_device_copyStr2Locale_UTF8;
 	d->keepalive = d->keepaliveinterval = d->keepalive ? d->keepalive : GLOB(keepalive);
+	d->mwiUpdateRequired = TRUE;
 
 	d->pendingUpdate = 0;
 	d->pendingDelete = 0;
@@ -2208,19 +2209,17 @@ void sccp_dev_postregistration(void *data)
 		d->useRedialMenu = FALSE;
 	}
 
-	sccp_dev_check_displayprompt(d);
-
-	d->mwilight = 0;
-/*
 	for (instance = SCCP_FIRST_LINEINSTANCE; instance < d->lineButtons.size; instance++) {
 		if (d->lineButtons.instance[instance]) {
 			AUTO_RELEASE(sccp_linedevices_t, linedevice , sccp_linedevice_retain(d->lineButtons.instance[instance]));
-			if (linedevice) {
-				sccp_mwi_setMWILineStatus(linedevice);
+			if (linedevice){
+				sccp_line_indicateMWI(linedevice);
 			}
 		}
 	}
-*/
+	sccp_device_setMWI(d);
+	sccp_dev_check_displayprompt(d);
+
 #ifdef CS_SCCP_PARK
 	sccp_buttonconfig_t *config = NULL;
 	SCCP_LIST_LOCK(&d->buttonconfig);
@@ -2325,9 +2324,7 @@ void _sccp_dev_clean(devicePtr device, boolean_t remove_from_global, boolean_t r
 			sccp_device_removeFromGlobals(d);
 		}
 
-		d->mwilight = 0;										/* reset mwi light */
 		d->linesRegistered = FALSE;
-
 		__saveLastDialedNumberToDatabase(d);
 		
 		if (d->active_channel) {
@@ -3350,4 +3347,51 @@ void sccp_device_setLamp(constDevicePtr device, skinny_stimulus_t stimulus, uint
 	}
 }
 
+void sccp_device_setMWI(devicePtr device)
+{
+	device->voicemailStatistic.newmsgs = 0;
+	device->voicemailStatistic.oldmsgs = 0;
+	for (uint8_t instance = SCCP_FIRST_LINEINSTANCE; instance < device->lineButtons.size; instance++) {
+		if(device->lineButtons.instance[instance]) {
+			sccp_line_t *l = device->lineButtons.instance[instance]->line;
+			device->voicemailStatistic.newmsgs += l->voicemailStatistic.newmsgs;
+			device->voicemailStatistic.oldmsgs += l->voicemailStatistic.oldmsgs;
+		}
+	}
+	sccp_log((DEBUGCAT_MWI)) (VERBOSE_PREFIX_3 "%s: (sccp_device_setMWI), newmsgs:%d, oldmsgs:%d\n", device->id, device->voicemailStatistic.newmsgs, device->voicemailStatistic.oldmsgs);
+	device->mwiUpdateRequired = TRUE;
+	sccp_device_indicateMWI(device);
+}
+
+/*!
+ * Temporarily suppress MWI output during call
+ */
+void sccp_device_suppressMWI(devicePtr device)
+{
+	if (!device->mwioncall) {
+		sccp_log((DEBUGCAT_MWI)) (VERBOSE_PREFIX_3 "%s: (sccp_device_suppressMWI)\n", device->id);
+		device->mwiUpdateRequired = TRUE;
+		sccp_device_setLamp(device, SKINNY_STIMULUS_VOICEMAIL, 0, SKINNY_LAMP_OFF);
+	}
+}
+
+void sccp_device_indicateMWI(devicePtr device)
+{
+	sccp_log((DEBUGCAT_MWI)) (VERBOSE_PREFIX_3 "%s: (sccp_device_indicateMWI) indication update required:%s\n", device->id, device->mwiUpdateRequired ? "yes" : "no");
+	if (device->mwiUpdateRequired) {
+		sccp_log((DEBUGCAT_MWI)) (VERBOSE_PREFIX_3 "%s: (sccp_device_indicateMWI) Set main voicemail lamp:%s\n", device->id,
+			device->voicemailStatistic.newmsgs ? "on" : "off");
+		sccp_device_setLamp(device, SKINNY_STIMULUS_VOICEMAIL, 0, device->voicemailStatistic.newmsgs ? device->mwilamp : SKINNY_LAMP_OFF);
+
+		if (device->voicemailStatistic.newmsgs || device->voicemailStatistic.oldmsgs) {
+			sccp_log((DEBUGCAT_MWI)) (VERBOSE_PREFIX_3 "%s: (sccp_device_indicateMWI) Set Have Voicemail on Display\n", device->id);
+			char buffer[StationMaxDisplayTextSize];
+			snprintf(buffer, StationMaxDisplayTextSize, "%s: (%u/%u)", SKINNY_DISP_YOU_HAVE_VOICEMAIL, device->voicemailStatistic.newmsgs, device->voicemailStatistic.oldmsgs);
+			sccp_device_addMessageToStack(device, SCCP_MESSAGE_PRIORITY_VOICEMAIL, buffer);
+		} else {
+			sccp_log((DEBUGCAT_MWI)) (VERBOSE_PREFIX_3 "%s: (sccp_device_indicateMWI) Remove Have Voicemail from Display\n", device->id);
+			sccp_device_clearMessageFromStack(device, SCCP_MESSAGE_PRIORITY_VOICEMAIL);
+		}
+	}
+}
 // kate: indent-width 4; replace-tabs off; indent-mode cstyle; auto-insert-doxygen on; line-numbers on; tab-indents on; keep-extra-spaces off; auto-brackets on;

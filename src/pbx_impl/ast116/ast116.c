@@ -3750,24 +3750,25 @@ static int module_reload(void)
 
 /* Begin Replace AST_MODULE_INFO macro */
 static struct ast_module_info __mod_info = {
-	/* self = */ NULL,
-	/* load = */ load_module,
-	/* reload = */ module_reload,
-	/* unload = */ unload_module,
-	/* name = */ AST_MODULE,
-	/* desc = */ SCCP_VERSIONSTR,
-	/* key = */ ASTERISK_GPL_KEY,
-	/* flags = */ AST_MODFLAG_LOAD_ORDER,
-	/* buildopt_sum = */ AST_BUILDOPT_SUM,
-	/* load_pri = */ AST_MODPRI_CHANNEL_DRIVER,
-	/* requires = */ NULL,			/* requires = "chan_local" / "Local",*/
-	/* optional_modules= */ NULL,
-	/* enhances= */ NULL,
-	/* reserved1= */ NULL,
-	/* reserved2= */ NULL,
-	/* reserved3= */ NULL,
-	/* reserved4= */ NULL,
-	/* support_level=*/ AST_MODULE_SUPPORT_EXTENDED
+	//.self = NULL,
+	.load = load_module,
+	.reload = module_reload,
+	.unload = unload_module,
+	.name = AST_MODULE,
+	.description = SCCP_VERSIONSTR,
+	.key = ASTERISK_GPL_KEY,
+	.flags = AST_MODFLAG_LOAD_ORDER,
+	.buildopt_sum = AST_BUILDOPT_SUM,
+	//.load_pri = AST_MODPRI_CHANNEL_DRIVER,
+	.load_pri = AST_MODPRI_APP_DEPEND,
+	.requires = "app_voicemail,res_stasis,res_stasis_device_state",			/* requires = chan_local / Local / ccss / app_voicemail.so*/ 
+	/*.optional_modules= NULL,
+	.enhances= NULL,
+	.reserved1= NULL,
+	.reserved2= NULL,
+	.reserved3= NULL,
+	.reserved4= NULL,*/
+	.support_level= AST_MODULE_SUPPORT_EXTENDED
 };
 static void  __attribute__((constructor)) __reg_module(void)
 {
