@@ -1275,8 +1275,6 @@ void sccp_dev_sendmsg(constDevicePtr d, sccp_mid_t t)
  */
 void sccp_dev_set_registered(devicePtr d, skinny_registrationstate_t state)
 {
-	sccp_event_t event = {{{ 0 }}};
-
 	sccp_log((DEBUGCAT_DEVICE)) (VERBOSE_PREFIX_3 "%s: (sccp_dev_set_registered) Setting Registered Status for Device from %s to %s\n", DEV_ID_LOG(d), skinny_registrationstate2str(sccp_device_getRegistrationState(d)), skinny_registrationstate2str(state));
 
 	if (!sccp_device_setRegistrationState(d, state)) {
@@ -1289,13 +1287,13 @@ void sccp_dev_set_registered(devicePtr d, skinny_registrationstate_t state)
 			sccp_log((DEBUGCAT_DEVICE)) (VERBOSE_PREFIX_3 "%s: Device does not support RegisterAvailableLinesMessage, force this\n", DEV_ID_LOG(d));
 			sccp_handle_AvailableLines(d->session, d, NULL);
 		}
-
 		sccp_dev_postregistration(d);
 	} else if (state == SKINNY_DEVICE_RS_PROGRESS) {
-		memset(&event, 0, sizeof(sccp_event_t));
-		event.type = SCCP_EVENT_DEVICE_PREREGISTERED;
-		event.event.deviceRegistered.device = sccp_device_retain(d);
-		sccp_event_fire(&event);
+		sccp_event_t *event = sccp_event_allocate(SCCP_EVENT_DEVICE_PREREGISTERED);
+		if (event) {
+			event->deviceRegistered.device = sccp_device_retain(d);
+			sccp_event_fire(event);
+		}
 	}
 	d->registrationTime = time(0);
 }
@@ -2115,7 +2113,6 @@ int sccp_device_check_ringback(devicePtr device)
 void sccp_dev_postregistration(void *data)
 {
 	sccp_device_t *d = data;
-	sccp_event_t event = {{{ 0 }}};
 
 #ifndef ASTDB_FAMILY_KEY_LEN
 #define ASTDB_FAMILY_KEY_LEN 100
@@ -2133,9 +2130,11 @@ void sccp_dev_postregistration(void *data)
 	sccp_log((DEBUGCAT_DEVICE + DEBUGCAT_CORE)) (VERBOSE_PREFIX_3 "%s: Device registered; performing post registration tasks...\n", d->id);
 
 	// Post event to interested listeners (hints, mwi) that device was registered.
-	event.type = SCCP_EVENT_DEVICE_REGISTERED;
-	event.event.deviceRegistered.device = sccp_device_retain(d);
-	sccp_event_fire(&event);
+	sccp_event_t *event = sccp_event_allocate(SCCP_EVENT_DEVICE_REGISTERED);
+	if (event) {
+		event->deviceRegistered.device = sccp_device_retain(d);
+		sccp_event_fire(event);
+	}
 
 	if (iPbx.feature_getFromDatabase) {
 		/* read last line/device states from db */
@@ -2310,7 +2309,6 @@ void _sccp_dev_clean(devicePtr device, boolean_t remove_from_global, boolean_t r
 	sccp_buttonconfig_t *config = NULL;
 	sccp_selectedchannel_t *selectedChannel = NULL;
 	sccp_channel_t *c = NULL;
-	sccp_event_t event = {{{ 0 }}};
 	int i = 0;
 
 #if defined(CS_DEVSTATE_FEATURE) && defined(CS_AST_HAS_EVENT)
@@ -2391,10 +2389,11 @@ void _sccp_dev_clean(devicePtr device, boolean_t remove_from_global, boolean_t r
 
 		sccp_log((DEBUGCAT_CORE + DEBUGCAT_DEVICE)) (VERBOSE_PREFIX_2 "SCCP: Unregister Device %s\n", d->id);
 
-		memset(&event, 0, sizeof(sccp_event_t));
-		event.type = SCCP_EVENT_DEVICE_UNREGISTERED;
-		event.event.deviceRegistered.device = sccp_device_retain(d);
-		sccp_event_fire(&event);
+		sccp_event_t *event = sccp_event_allocate(SCCP_EVENT_DEVICE_UNREGISTERED);
+		if (event) {
+			event->deviceRegistered.device = sccp_device_retain(d);
+			sccp_event_fire(event);
+		}
 
 		if (SCCP_NAT_AUTO == d->nat || SCCP_NAT_AUTO_OFF == d->nat || SCCP_NAT_AUTO_ON == d->nat) {
 			d->nat = SCCP_NAT_AUTO;
@@ -3065,22 +3064,22 @@ void sccp_device_featureChangedDisplay(const sccp_event_t * event)
 	size_t len = sizeof(tmp);
 	char *s = tmp;
 
-	if (!event || !(device = event->event.featureChanged.device)) {
+	if (!event || !(device = event->featureChanged.device)) {
 		return;
 	}
-	sccp_log((DEBUGCAT_DEVICE + DEBUGCAT_EVENT + DEBUGCAT_FEATURE)) (VERBOSE_PREFIX_3 "%s: Received Feature Change Event: %s(%d)\n", DEV_ID_LOG(device), sccp_feature_type2str(event->event.featureChanged.featureType), event->event.featureChanged.featureType);
-	switch (event->event.featureChanged.featureType) {
+	sccp_log((DEBUGCAT_DEVICE + DEBUGCAT_EVENT + DEBUGCAT_FEATURE)) (VERBOSE_PREFIX_3 "%s: Received Feature Change Event: %s(%d)\n", DEV_ID_LOG(device), sccp_feature_type2str(event->featureChanged.featureType), event->featureChanged.featureType);
+	switch (event->featureChanged.featureType) {
 		case SCCP_FEATURE_CFWDNONE:
 			sccp_device_clearMessageFromStack(device, SCCP_MESSAGE_PRIORITY_CFWD);
 			break;
 		case SCCP_FEATURE_CFWDBUSY:
 		case SCCP_FEATURE_CFWDALL:
-			if ((linedevice = event->event.featureChanged.optional_linedevice)) {
+			if ((linedevice = event->featureChanged.optional_linedevice)) {
 				sccp_line_t *line = linedevice->line;
 				uint8_t instance = linedevice->lineInstance;
 
 				sccp_dev_forward_status(line, instance, device);
-				switch (event->event.featureChanged.featureType) {
+				switch (event->featureChanged.featureType) {
 					case SCCP_FEATURE_CFWDALL:
 						if (linedevice->cfwdAll.enabled) {
 							/* build disp message string */

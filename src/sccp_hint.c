@@ -391,12 +391,12 @@ static void sccp_hint_eventListener(const sccp_event_t * event)
 	}
 	switch (event->type) {
 		case SCCP_EVENT_DEVICE_REGISTERED:
-			device = event->event.deviceRegistered.device;
+			device = event->deviceRegistered.device;
 
 			sccp_hint_deviceRegistered(device);
 			break;
 		case SCCP_EVENT_DEVICE_UNREGISTERED:
-			device = event->event.deviceRegistered.device;
+			device = event->deviceRegistered.device;
 
 			if (device) {
 				char *deviceName = pbx_strdupa(device->id);
@@ -406,17 +406,17 @@ static void sccp_hint_eventListener(const sccp_event_t * event)
 
 			break;
 		case SCCP_EVENT_DEVICE_ATTACHED:
-			sccp_log((DEBUGCAT_HINT)) (VERBOSE_PREFIX_2 "%s (hint_eventListener) device %s attached on line %s\n", DEV_ID_LOG(event->event.deviceAttached.linedevice->device), event->event.deviceAttached.linedevice->device->id, event->event.deviceAttached.linedevice->line->name);
-			sccp_hint_attachLine(event->event.deviceAttached.linedevice->line, event->event.deviceAttached.linedevice->device);
+			sccp_log((DEBUGCAT_HINT)) (VERBOSE_PREFIX_2 "%s (hint_eventListener) device %s attached on line %s\n", DEV_ID_LOG(event->deviceAttached.linedevice->device), event->deviceAttached.linedevice->device->id, event->deviceAttached.linedevice->line->name);
+			sccp_hint_attachLine(event->deviceAttached.linedevice->line, event->deviceAttached.linedevice->device);
 			break;
 		case SCCP_EVENT_DEVICE_DETACHED:
-			sccp_log((DEBUGCAT_HINT)) (VERBOSE_PREFIX_2 "%s (hint_eventListener) device %s detached from line %s\n", DEV_ID_LOG(event->event.deviceAttached.linedevice->device), event->event.deviceAttached.linedevice->device->id, event->event.deviceAttached.linedevice->line->name);
-			sccp_hint_detachLine(event->event.deviceAttached.linedevice->line, event->event.deviceAttached.linedevice->device);
+			sccp_log((DEBUGCAT_HINT)) (VERBOSE_PREFIX_2 "%s (hint_eventListener) device %s detached from line %s\n", DEV_ID_LOG(event->deviceAttached.linedevice->device), event->deviceAttached.linedevice->device->id, event->deviceAttached.linedevice->line->name);
+			sccp_hint_detachLine(event->deviceAttached.linedevice->line, event->deviceAttached.linedevice->device);
 			break;
 		case SCCP_EVENT_LINESTATUS_CHANGED:
 			pbx_rwlock_rdlock(&GLOB(lock));
 			if (!GLOB(reload_in_progress)) {									/* skip processing hints when reloading */
-				sccp_hint_lineStatusChanged(event->event.lineStatusChanged.line, event->event.lineStatusChanged.optional_device);
+				sccp_hint_lineStatusChanged(event->lineStatusChanged.line, event->lineStatusChanged.optional_device);
 			}
 			pbx_rwlock_unlock(&GLOB(lock));
 			break;
@@ -1009,10 +1009,10 @@ static void sccp_hint_handleFeatureChangeEvent(const sccp_event_t * event)
 {
 	sccp_buttonconfig_t *buttonconfig = NULL;
 
-	switch (event->event.featureChanged.featureType) {
+	switch (event->featureChanged.featureType) {
 		case SCCP_FEATURE_DND:
 			{
-				AUTO_RELEASE(sccp_device_t, d , sccp_device_retain(event->event.featureChanged.device));
+				AUTO_RELEASE(sccp_device_t, d , sccp_device_retain(event->featureChanged.device));
 
 				if (d) {
 					SCCP_LIST_LOCK(&d->buttonconfig);

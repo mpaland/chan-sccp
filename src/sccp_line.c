@@ -151,10 +151,11 @@ void sccp_line_addToGlobals(sccp_line_t * line)
 		sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_3 "Added line '%s' to Glob(lines)\n", l->name);
 
 		/* emit event */
-		sccp_event_t event = {{{0}}};
-		event.type = SCCP_EVENT_LINE_CREATED;
-		event.event.lineCreated.line = sccp_line_retain(l);
-		sccp_event_fire(&event);
+		sccp_event_t *event = sccp_event_allocate(SCCP_EVENT_LINEINSTANCE_CREATED);
+		if (event) {
+			event->lineInstance.line = sccp_line_retain(l);
+			sccp_event_fire(event);
+		}
 	} else {
 		pbx_log(LOG_ERROR, "Adding null to global line list is not allowed!\n");
 	}
@@ -258,11 +259,11 @@ void sccp_line_clean(sccp_line_t * l, boolean_t remove_from_global)
 	sccp_line_kill_channels(l);
 	sccp_line_removeDevice(l, NULL);									// removing all devices from this line.
 	if (remove_from_global) {
-		sccp_event_t event = {{{0}}};
-		event.type = SCCP_EVENT_LINE_DESTROYED;
-		event.event.lineCreated.line = sccp_line_retain(l);
-		sccp_event_fire(&event);
-
+		sccp_event_t *event = sccp_event_allocate(SCCP_EVENT_LINEINSTANCE_DESTROYED);
+		if (event) {
+			event->lineInstance.line = sccp_line_retain(l);
+			sccp_event_fire(event);
+		}
 		sccp_line_removeFromGlobals(l);									// final release
 	}
 }
@@ -535,11 +536,11 @@ void sccp_line_addDevice(sccp_line_t * line, sccp_device_t * d, uint8_t lineInst
 	linedevice->device->configurationStatistic.numberOfLines++;
 
 	// fire event for new device
-	sccp_event_t event = {{{0}}};
-	event.type = SCCP_EVENT_DEVICE_ATTACHED;
-	event.event.deviceAttached.linedevice = sccp_linedevice_retain(linedevice);
-	sccp_event_fire(&event);
-
+	sccp_event_t *event = sccp_event_allocate(SCCP_EVENT_DEVICE_ATTACHED);
+	if (event) {
+		event->deviceAttached.linedevice = sccp_linedevice_retain(linedevice);
+		sccp_event_fire(event);
+	}
 	regcontext_exten(l, &(linedevice->subscriptionId), 1);
 	sccp_log((DEBUGCAT_LINE)) (VERBOSE_PREFIX_3 "%s: added linedevice: %p with device: %s\n", l->name, linedevice, DEV_ID_LOG(device));
 }
@@ -573,12 +574,11 @@ void sccp_line_removeDevice(sccp_line_t * l, sccp_device_t * device)
 			regcontext_exten(l, &(linedevice->subscriptionId), 0);
 			SCCP_LIST_REMOVE_CURRENT(list);
 			l->statistic.numberOfActiveDevices--;
-
-			sccp_event_t event = {{{0}}};
-			event.type = SCCP_EVENT_DEVICE_DETACHED;
-			event.event.deviceAttached.linedevice = sccp_linedevice_retain(linedevice);	/* after processing this event the linedevice will be cleaned up */
-			sccp_event_fire(&event);
-
+			sccp_event_t *event = sccp_event_allocate(SCCP_EVENT_DEVICE_DETACHED);
+			if (event) {
+				event->deviceAttached.linedevice = sccp_linedevice_retain(linedevice);
+				sccp_event_fire(event);
+			}
 			sccp_linedevice_release(&linedevice);						/* explicit release of list retained linedevice */
 #ifdef CS_SCCP_REALTIME
 			if (l->realtime && SCCP_LIST_GETSIZE(&l->devices) == 0 && SCCP_LIST_GETSIZE(&l->channels) == 0 ) {
@@ -786,60 +786,6 @@ sccp_channelstate_t sccp_line_getDNDChannelState(sccp_line_t * line)
 	return state;
 }
 #endif
-
-/*=================================================================================== MWI EVENT HANDLING ==============*/
-static void sccp_line_update_mwistate(sccp_line_t *l)
-{
-}
-
-static void sccp_line_mwiChanged(const sccp_event_t * event)
-{
-	if (!event || !event->event.mwiChanged.line) {
-		pbx_log(LOG_ERROR, "(lineCreatedEvent) event or line not provided\n");
-		return;
-	}
-	
-	sccp_line_t *l = event->event.lineCreated.line;
-	
-	int previousNewMsgs = l->voicemailStatistic.newmsgs;
-	int previousOldMsgs = l->voicemailStatistic.oldmsgs;
-	l->voicemailStatistic.newmsgs = event->event.mwiChanged.newmsgs;
-	l->voicemailStatistic.oldmsgs = event->event.mwiChanged.oldmsgs;
-	
-	// toggle line iconStatus
-	// toggle line messageStatus
-	sccp_line_update_mwistate(l);
-	
-	sccp_linedevices_t *linedevice = NULL;
-	SCCP_LIST_LOCK(&l->devices);
-	SCCP_LIST_TRAVERSE(&l->devices, linedevice, list) {
-		AUTO_RELEASE(sccp_device_t, d, sccp_device_retain(linedevice->device));
-		if (d) {
-			d->voicemailStatistic.newmsgs = l->voicemailStatistic.newmsgs - previousNewMsgs;
-			d->voicemailStatistic.oldmsgs = l->voicemailStatistic.oldmsgs - previousOldMsgs;
-
-			//sccp_device_update_mwistate(d);
-				//boolean_t lightStatus = d->voicemailStatistic.newmsgs;
-				//boolean_t messageStatus = (d->voicemailStatistic.newmsgs || d->voicemailStatistic.oldmsgs)
-				// toggle device lightStatus;
-				// except if !mwioncall and deviceStatus is !onhook
-				// toggle device messageStatus;
-		}
-	}
-	SCCP_LIST_UNLOCK(&l->devices);
-}
-
-/* Module Init */
-static void __attribute__((constructor)) sccp_line_module_init(void)
-{
-	sccp_event_subscribe(SCCP_EVENT_MWI_CHANGED, sccp_line_mwiChanged, TRUE);
-}
-
-static void __attribute__((destructor)) sccp_line_module_destroy(void)
-{
-	sccp_event_unsubscribe(SCCP_EVENT_MWI_CHANGED, sccp_line_mwiChanged);
-}
-
 
 /*=================================================================================== FIND FUNCTIONS ==============*/
 

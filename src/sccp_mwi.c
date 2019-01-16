@@ -279,12 +279,12 @@ static void removeAllSubscriptions(void)
  * =========================== */
 static void handleLineCreationEvent(const sccp_event_t * event)
 {
-	if (!event || !event->event.lineCreated.line) {
+	if (!event || !event->lineInstance.line) {
 		pbx_log(LOG_ERROR, "Event or line not provided\n");
 		return;
 	}
 	sccp_mailbox_t *mailbox = NULL;
-	sccp_line_t *line = event->event.lineCreated.line;
+	sccp_line_t *line = event->lineInstance.line;
 
 	sccp_log((DEBUGCAT_MWI)) (VERBOSE_PREFIX_2 "%s: (mwi::handleLineCreationEvent)\n", line->name);
 	if (line && (&line->mailboxes) != NULL) {
@@ -296,11 +296,11 @@ static void handleLineCreationEvent(const sccp_event_t * event)
 
 static void handleLineDestructionEvent(const sccp_event_t * event)
 {
-	if (!event || !event->event.lineDestroyed.line) {
+	if (!event || !event->lineInstance.line) {
 		pbx_log(LOG_ERROR, "Eevent or line not provided\n");
 		return;
 	}
-	sccp_line_t *line = event->event.lineDestroyed.line;
+	sccp_line_t *line = event->lineInstance.line;
 
 	sccp_log((DEBUGCAT_MWI)) (VERBOSE_PREFIX_2 "%s: (mwi::handleLineDestructionEvent)\n", line->name);
 
@@ -458,8 +458,8 @@ static void module_start(void)
 	SCCP_VECTOR_INIT(&subscriptions,1);
 	pbx_mutex_init(&subscriptions_lock);
 
-	sccp_event_subscribe(SCCP_EVENT_LINE_CREATED, handleLineCreationEvent, TRUE);
-	sccp_event_subscribe(SCCP_EVENT_LINE_DESTROYED, handleLineDestructionEvent, FALSE);
+	//sccp_event_subscribe(SCCP_EVENT_LINE_CREATED, handleLineCreationEvent, TRUE);
+	//sccp_event_subscribe(SCCP_EVENT_LINE_DESTROYED, handleLineDestructionEvent, FALSE);
 
 #if MWI_USE_POLLING
 	// start polling for all subscriptions
@@ -469,8 +469,8 @@ static void module_start(void)
 static void module_stop(void)
 {
 	pbx_log(LOG_NOTICE, "SCCP: (mwi::module_stop)\n");
-	sccp_event_unsubscribe(SCCP_EVENT_LINE_DESTROYED, handleLineDestructionEvent);
-	sccp_event_unsubscribe(SCCP_EVENT_LINE_CREATED, handleLineCreationEvent);
+	//sccp_event_unsubscribe(SCCP_EVENT_LINE_DESTROYED, handleLineDestructionEvent);
+	//sccp_event_unsubscribe(SCCP_EVENT_LINE_CREATED, handleLineCreationEvent);
 
 	removeAllSubscriptions();
 	SCCP_VECTOR_FREE(&subscriptions);
