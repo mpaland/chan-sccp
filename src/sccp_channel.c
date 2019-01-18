@@ -318,35 +318,30 @@ EXIT:
 
 static void sccp_channel_recalculateCodecFormat(sccp_channel_t * channel)
 {
-	char s1[512], s2[512], s3[512];
 	skinny_codec_t joint = channel->rtp.audio.writeFormat;
-
 	if (channel->rtp.audio.receiveChannelState == SCCP_RTP_STATUS_INACTIVE && channel->rtp.audio.mediaTransmissionState == SCCP_RTP_STATUS_INACTIVE) {
 		joint = sccp_codec_findBestJoint(channel, channel->preferences.audio, channel->remoteCapabilities.audio);
 		if (joint == SKINNY_CODEC_NONE) {
 			joint = SKINNY_CODEC_WIDEBAND_256K;
 		}
-
 		if (channel->rtp.audio.instance) {                      // Fix nativeAudioFormats
 			skinny_codec_t codecs[SKINNY_MAX_CAPABILITIES] = { joint, 0};
 			iPbx.set_nativeAudioFormats(channel, codecs, 1);
 		}
 	}
-	if (joint != SKINNY_CODEC_NONE) {
-		if (channel->rtp.audio.receiveChannelState == SCCP_RTP_STATUS_INACTIVE) {
-			channel->rtp.audio.writeFormat = joint;
-			iPbx.rtp_setWriteFormat(channel, joint);
-		}
-		if (channel->rtp.audio.mediaTransmissionState == SCCP_RTP_STATUS_INACTIVE) {
-			channel->rtp.audio.readFormat = joint;
-			iPbx.rtp_setReadFormat(channel, joint);
-		}
+	if (channel->rtp.audio.receiveChannelState == SCCP_RTP_STATUS_INACTIVE) {
+		channel->rtp.audio.writeFormat = joint;
+		iPbx.rtp_setWriteFormat(channel, joint);
 	}
-	sccp_log((DEBUGCAT_CODEC + DEBUGCAT_CHANNEL)) (VERBOSE_PREFIX_3 "%s - %s: (recalculateCodecformat) \n\tcapabilities: %s\n\tpreferences: %s\n\tremote caps: %s\n\tFormat:%s\n",
-		channel->currentDeviceId, channel->designator, 
-		sccp_codec_multiple2str(s1, sizeof(s1) - 1, channel->capabilities.audio, ARRAY_LEN(channel->capabilities.audio)), 
-		sccp_codec_multiple2str(s2, sizeof(s2) - 1, channel->preferences.audio, ARRAY_LEN(channel->preferences.audio)), 
-		sccp_codec_multiple2str(s3, sizeof(s3) - 1, channel->remoteCapabilities.audio, ARRAY_LEN(channel->remoteCapabilities.audio)),
+	if (channel->rtp.audio.mediaTransmissionState == SCCP_RTP_STATUS_INACTIVE) {
+		channel->rtp.audio.readFormat = joint;
+		iPbx.rtp_setReadFormat(channel, joint);
+	}
+	char s1[512], s2[512];
+	sccp_log((DEBUGCAT_CODEC + DEBUGCAT_CHANNEL)) (VERBOSE_PREFIX_3 "%s - %s: (recalculateCodecformat) \n\tours: %s\n\ttheirs: %s\n\tpicked: %s\n",
+		channel->currentDeviceId, channel->designator,
+		sccp_codec_multiple2str(s1, sizeof(s1) - 1, channel->preferences.audio, ARRAY_LEN(channel->preferences.audio)),
+		sccp_codec_multiple2str(s2, sizeof(s2) - 1, channel->remoteCapabilities.audio, ARRAY_LEN(channel->remoteCapabilities.audio)),
 		codec2name(joint)
 	);
 }
@@ -580,7 +575,7 @@ void sccp_channel_openReceiveChannel(constChannelPtr channel)
 		sccp_channel_updateChannelCapability((channelPtr)channel);							// discard const
 	}
 	sccp_rtp_t *audio = (sccp_rtp_t *) &(channel->rtp.audio);
-	sccp_log((DEBUGCAT_RTP + DEBUGCAT_CHANNEL)) (VERBOSE_PREFIX_3 "%s, OpenReceiveChannel with format %s, payload %d, echocancel: %s, passthrupartyid: %u, pbx_channel_name: %s\n",
+	sccp_log((DEBUGCAT_RTP + DEBUGCAT_CHANNEL)) (VERBOSE_PREFIX_3 "%s, OpenReceiveChannel with codec:%s(%d), echocancel:%s, passthrupartyid:%u, pbx_channel_name:%s\n",
 			channel->designator, codec2str(audio->writeFormat), audio->writeFormat,
 			channel->line ? (channel->line->echocancel ? "YES" : "NO") : "(nil)>",
 			channel->passthrupartyid, iPbx.getChannelName(channel)
@@ -720,15 +715,18 @@ void sccp_channel_startMediaTransmission(constChannelPtr channel)
 
 	if (!d) {
 		pbx_log(LOG_ERROR, "SCCP: (sccp_channel_startMediaTransmission) Could not retrieve device from channel\n");
+		sccp_channel_closeMultiMediaReceiveChannel(channel, FALSE);
 		return;
 	}
 
 	if (!channel->rtp.audio.instance) {
 		sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_3 "%s: can't start rtp media transmission, maybe channel is down %s\n", channel->currentDeviceId, channel->designator);
+		sccp_channel_closeMultiMediaReceiveChannel(channel, FALSE);
 		return;
 	}
 
 	sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_3 "%s: Starting Phone RTP/UDP Transmission (State: %s[%d])\n", d->id, sccp_channelstate2str(channel->state), channel->state);
+
 	/* Mute mic feature: If previously set, mute the microphone after receiving of media is already open, but before starting to send to rtp. */
 	/* This must be done in this exact order to work also on newer phones like the 8945. It must also be done in other places for other phones. */
 	if (!channel->isMicrophoneEnabled()) {
@@ -738,7 +736,9 @@ void sccp_channel_startMediaTransmission(constChannelPtr channel)
 	sccp_rtp_t *audio = (sccp_rtp_t *) &(channel->rtp.audio);
 
 	if (SCCP_RTP_STATUS_INACTIVE == audio->receiveChannelState) {
-		pbx_log(LOG_ERROR, "%s: (sccp_channel_startMediaTransmission) Starting MediaTransmission before OpenReceiveChannel !", channel->currentDeviceId);
+		pbx_log(LOG_ERROR, "%s: (sccp_channel_startMediaTransmission) Starting MediaTransmission before OpenReceiveChannel! giving up", channel->currentDeviceId);
+		sccp_channel_closeMultiMediaReceiveChannel(channel, FALSE);
+		return;
 	}
 
 	if (d->nat >= SCCP_NAT_ON) {
@@ -752,6 +752,13 @@ void sccp_channel_startMediaTransmission(constChannelPtr channel)
 			audio->readFormat = audio->writeFormat;
 		}
 	}
+
+	if (audio->readFormat == SKINNY_CODEC_NONE) {
+		pbx_log(LOG_ERROR, "%s: (sccp_channel_startMediaTransmission) audio->readFormat is none! giving up", channel->currentDeviceId);
+		sccp_channel_closeMultiMediaReceiveChannel(channel, FALSE);
+		return;
+	}
+
 	audio->mediaTransmissionState |= SCCP_RTP_STATUS_PROGRESS;
 	d->protocol->sendStartMediaTransmission(d, channel);
 
@@ -760,7 +767,7 @@ void sccp_channel_startMediaTransmission(constChannelPtr channel)
 	sccp_copy_string(buf1, sccp_netsock_stringify(&audio->phone), sizeof(buf1));
 	sccp_copy_string(buf2, sccp_netsock_stringify(&audio->phone_remote), sizeof(buf2));
 	sccp_log(DEBUGCAT_RTP) (VERBOSE_PREFIX_3 "%s: Tell Phone to send RTP/UDP media from %s to %s (NAT: %s)\n", d->id, buf1, buf2, sccp_nat2str(d->nat));
-	sccp_log(DEBUGCAT_RTP) (VERBOSE_PREFIX_3 "%s: Using codec: %s(%d), TOS %d, Silence Suppression: %s for call with PassThruId: %u and CallID: %u\n", d->id, codec2str(audio->readFormat), audio->readFormat, d->audio_tos, channel->line->silencesuppression ? "ON" : "OFF", channel->passthrupartyid, channel->callid);
+	sccp_log(DEBUGCAT_RTP) (VERBOSE_PREFIX_3 "%s: Using codec:%s(%d), TOS:%d, Silence Suppression:%s for call with PassThruId:%u and CallID:%u\n", d->id, codec2str(audio->readFormat), audio->readFormat, d->audio_tos, channel->line->silencesuppression ? "ON" : "OFF", channel->passthrupartyid, channel->callid);
 }
 
 int sccp_channel_mediaTransmissionStarted(devicePtr d, channelPtr c)
@@ -903,6 +910,7 @@ void sccp_channel_openMultiMediaReceiveChannel(constChannelPtr channel)
 
 	if (joint == SKINNY_CODEC_NONE) {
 		sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_2 "%s: (openMultiMediaReceiveChannel) No joint codecs found\n", d->id);
+		((sccp_channel_t *)channel)->videomode = SCCP_VIDEO_MODE_OFF;						// discard const
 		return;
 	}
 
@@ -1493,30 +1501,6 @@ void sccp_channel_answer(const sccp_device_t * device, sccp_channel_t * channel)
 	if (channel->state == SCCP_CHANNELSTATE_HOLD) {
 		channel->line->statistic.numberOfActiveChannels--;
 	}
-
-	// check if we have preferences from channel request
-	sccp_channel_updateChannelCapability(channel);
-	/*
-	skinny_codec_t preferredCodec = channel->preferences.audio[0];
-	sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_3 "%s: (sccp_channel_answer) current preferredCodec=%d\n", device->id, preferredCodec);
-
-	// we changed channel->preferences.audio in sccp_channel_setDevice, so push the preferred codec back to pos 1
-	if (preferredCodec != SKINNY_CODEC_NONE) {
-		skinny_codec_t tempCodecPreferences[ARRAY_LEN(channel->preferences.audio)];
-		uint8_t numFoundCodecs = 1;
-
-		// we did not allow this codec in device prefence list, so do not use this as primary preferred codec
-		if (!sccp_codec_isCompatible(preferredCodec, channel->preferences.audio, ARRAY_LEN(channel->preferences.audio))) {
-			numFoundCodecs = 0;
-		}
-
-		// save original preferences
-		memcpy(&tempCodecPreferences, channel->preferences.audio, sizeof(channel->preferences.audio));
-		channel->preferences.audio[0] = preferredCodec;
-
-		memcpy(&channel->preferences.audio[numFoundCodecs], tempCodecPreferences, sizeof(skinny_codec_t) * (ARRAY_LEN(channel->preferences.audio) - numFoundCodecs));
-	}
-	*/
 
 	/* end callforwards if any */
 	sccp_channel_end_forwarding_channel(channel);
