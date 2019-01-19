@@ -227,12 +227,12 @@ static struct ast_channel_tech sccp_tech = {
 	early_bridge:		ast_rtp_instance_early_bridge,
 	indicate:		sccp_astwrap_indicate,
 	fixup:			sccp_astwrap_fixup,
-	setoption:		NULL,
-	queryoption:		NULL,
+	setoption:		sccp_astwrap_setOption,
+//	queryoption:		NULL,
 	transfer:		NULL,
 	write_video:		sccp_astwrap_rtp_write,
 	write_text:		NULL,
-	bridged_channel:	NULL,
+//	bridged_channel:	NULL,
 	func_channel_read:	sccp_astgenwrap_channel_read,
 	func_channel_write:	sccp_astgenwrap_fktChannelWrite,
 	get_base_channel:	NULL,
@@ -1903,7 +1903,14 @@ static int sccp_astwrap_fixup(PBX_CHANNEL_TYPE * oldchan, PBX_CHANNEL_TYPE * new
 				c->hangupRequest = sccp_astgenwrap_requestHangup;
 			}
 			sccp_astwrap_setOwner(c, newchan);
+
 			//! \todo force update of rtp peer for directrtp
+			/* Re-invite RTP back to Asterisk. Needed if channel is masqueraded out of a native
+			   RTP bridge (i.e., RTP not going through Asterisk): RTP bridge code might not be
+			   able to do this if the masquerade happens before the bridge breaks (e.g., AMI
+			   redirect of both channels). Note that a channel can not be masqueraded *into*
+			   a native bridge. So there is no danger that this breaks a native bridge that
+			   should stay up. */
 			// sccp_astwrap_update_rtp_peer(newchan, NULL, NULL, 0, 0, 0);
 
 #ifdef CS_EXPERIMENTAL
@@ -2019,6 +2026,7 @@ static enum ast_rtp_glue_result sccp_astwrap_get_rtp_info(PBX_CHANNEL_TYPE * ast
 	if (!(rtpInfo & SCCP_RTP_INFO_ALLOW_DIRECTRTP)) {
 		sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_1 "%s: (get_rtp_info) Direct RTP disabled ->  Using AST_RTP_TRY_PARTIAL for channel %s\n", c->currentDeviceId, pbx_channel_name(ast));
 		return AST_RTP_GLUE_RESULT_LOCAL;
+		//return res;
 	}
 
 	sccp_log((DEBUGCAT_RTP | DEBUGCAT_HIGH)) (VERBOSE_PREFIX_1 "%s: (get_rtp_info) Channel %s Returning res: %s\n", c->currentDeviceId, pbx_channel_name(ast), ((res == 2) ? "indirect-rtp" : ((res == 1) ? "direct-rtp" : "forbid")));
@@ -2040,6 +2048,7 @@ static enum ast_rtp_glue_result sccp_astwrap_get_vrtp_info(PBX_CHANNEL_TYPE * as
 
 	if (pbx_channel_state(ast) != AST_STATE_UP) {
 		sccp_log((DEBUGCAT_CHANNEL | DEBUGCAT_RTP)) (VERBOSE_PREFIX_1 "%s: (get_vrtp_info) Asterisk requested EarlyRTP peer for channel %s\n", c->currentDeviceId, pbx_channel_name(ast));
+		return AST_RTP_GLUE_RESULT_LOCAL;
 	} else {
 		sccp_log((DEBUGCAT_CHANNEL | DEBUGCAT_RTP)) (VERBOSE_PREFIX_1 "%s: (get_vrtp_info) Asterisk requested RTP peer for channel %s\n", c->currentDeviceId, pbx_channel_name(ast));
 	}
@@ -2094,7 +2103,14 @@ static int sccp_astwrap_update_rtp_peer(PBX_CHANNEL_TYPE * ast, PBX_RTP_TYPE * r
 			result = -1;
 			break;
 		}
-		sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_2 "%s: (update_rtp_peer) stage: %s, remote codecs capabilty: %s (%lu), nat_active: %d\n", c->currentDeviceId, S_COR(AST_STATE_UP == pbx_channel_state(ast), "RTP", "EarlyRTP"), ast_format_cap_get_names((struct ast_format_cap *) codecs, &codec_buf), (long unsigned int) codecs, nat_active);
+		sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_2 "%s: (update_rtp_peer) stage: %s, remote codecs capabilty: %s, nat_active: %d\n", c->currentDeviceId,
+			S_COR(AST_STATE_UP == pbx_channel_state(ast), "RTP", "EarlyRTP"), ast_format_cap_get_names((struct ast_format_cap *) codecs, &codec_buf), nat_active);
+
+		struct ast_format_cap *peercaps = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
+		int peerNonCodecCapability;
+		ast_rtp_codecs_payload_formats(ast_rtp_instance_get_codecs(rtp), peercaps, &peerNonCodecCapability);
+		sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_2 "%s: (update_rtp_peer) remote rtp instance codecs:%s\n", ast_format_cap_get_names(peercaps, &codec_buf));
+		ao2_ref(peercaps, -1);
 
 		if (!c->line) {
 			sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_1 "%s: (update_rtp_peer) NO LINE\n", c->currentDeviceId);
@@ -2129,7 +2145,7 @@ static int sccp_astwrap_update_rtp_peer(PBX_CHANNEL_TYPE * ast, PBX_RTP_TYPE * r
 			instance = rtp;
 		} else if (vrtp) {
 			instance = vrtp;
-#ifdef CS_SCCP_VIDEO			
+#ifdef CS_SCCP_VIDEO
 			/* video requested by remote side, let's see if we support video */ 
  			/* should be moved to sccp_rtp.c */
 /*
@@ -2172,6 +2188,8 @@ static int sccp_astwrap_update_rtp_peer(PBX_CHANNEL_TYPE * ast, PBX_RTP_TYPE * r
 			sccp_session_getOurIP(d->session, &sas, sccp_netsock_is_IPv4(&sas) ? AF_INET : AF_INET6);
 		}
 
+		//ast_format_cap *codecs = ast_rtp_instance_get_codecs(instance);
+
 		sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_1 "%s: (update_rtp_peer) new remote rtp ip = '%s'\n (d->directrtp: %s && !d->nat: %s && !remote->nat_active: %s && d->acl_allow: %s) => directmedia=%s\n", c->currentDeviceId, sccp_netsock_stringify(&sas), S_COR(d->directrtp, "yes", "no"),
 					  sccp_nat2str(d->nat),
 					  S_COR(!nat_active, "yes", "no"), S_COR(directmedia, "yes", "no"), S_COR(directmedia, "yes", "no")
@@ -2208,17 +2226,21 @@ static void sccp_astwrap_getCodec(PBX_CHANNEL_TYPE * ast, struct ast_format_cap 
 	for (i = 0; i < ARRAY_LEN(channel->preferences.audio); i++) {
 		struct ast_format *ast_format = sccp_astwrap_skinny2ast_format(channel->preferences.audio[i]);
 		if (ast_format != ast_format_none) {
-			unsigned int framing = ast_format_get_default_ms(ast_format);
+			//unsigned int framing = ast_format_get_default_ms(ast_format);
+			unsigned int framing = ast_format_cap_get_format_framing(ast_channel_nativeformats(ast), ast_format);
 			ast_format_cap_append(result, ast_format, framing);
 		}
 	}
+#if CS_SCCP_VIDEO
 	for (i = 0; i < ARRAY_LEN(channel->preferences.video); i++) {
 		struct ast_format *ast_format = sccp_astwrap_skinny2ast_format(channel->preferences.video[i]);
 		if (ast_format != ast_format_none) {
-			unsigned int framing = ast_format_get_default_ms(ast_format);
+			//unsigned int framing = ast_format_get_default_ms(ast_format);
+			unsigned int framing = ast_format_cap_get_format_framing(ast_channel_nativeformats(ast), ast_format);
 			ast_format_cap_append(result, ast_format, framing);
 		}
 	}
+#endif
 
 	return;
 }
@@ -2343,11 +2365,9 @@ static int sccp_astwrap_callerid_presentation(PBX_CHANNEL_TYPE *pbx_chan)
 
 static void add_payload_mapping_helper(struct ast_rtp_codecs *newrtp, int payload_code, char *rtp_map_filter, const char *mime, int rate)
 {
+	sccp_log(DEBUGCAT_CODEC)(VERBOSE_PREFIX_3 "SCCP: update rtpmap: payload:%d, mime:%s, rate:%d\n", payload_code, mime, rate);
 	ast_rtp_codecs_payloads_set_m_type(newrtp, NULL, payload_code);
-	if (rate ?
-		ast_rtp_codecs_payloads_set_rtpmap_type_rate(newrtp, NULL, payload_code, rtp_map_filter, (char *)mime, 0, rate) :
-		ast_rtp_codecs_payloads_set_rtpmap_type(newrtp, NULL, payload_code, rtp_map_filter, (char *)mime, 0)
-	) {
+	if (ast_rtp_codecs_payloads_set_rtpmap_type_rate(newrtp, NULL, payload_code, rtp_map_filter, (char *)mime, 0, rate)) {
 		ast_rtp_codecs_payloads_unset(newrtp, NULL, payload_code);
 	}
 }
@@ -2395,8 +2415,10 @@ static boolean_t sccp_astwrap_updateRtpMapping(constDevicePtr d,constChannelPtr 
 		if (SCCP_DTMFMODE_SKINNY == d->dtmfmode) {
 			add_payload_mapping_helper(&newrtp, 96, rtp_map_filter, "telephone-event", 0);
 			add_payload_mapping_helper(&newrtp, 105, rtp_map_filter, "cisco-telephone-event", 0);
+			add_payload_mapping_helper(&newrtp, 121, rtp_map_filter, "cisco-telephone-event", 0);
 		}
-		add_payload_mapping_helper(&newrtp, 101, rtp_map_filter, "CISCO_DTMF", 0);
+		add_payload_mapping_helper(&newrtp, 101, rtp_map_filter, "telephone-event", 0);
+		add_payload_mapping_helper(&newrtp, 11, rtp_map_filter, "L16-256", 16000);				// slin16 -> wideband
 		add_payload_mapping_helper(&newrtp, 25, rtp_map_filter, "L16", 16000);					// slin16 -> wideband
 
 		// example add H264 with a different format strings like "a=fmtp:95 packetization-mode=1;max-fs=6336;max-mbps=190080;profile-level-id=42801e"
@@ -2491,6 +2513,7 @@ static boolean_t sccp_astwrap_createRtpInstance(constDevicePtr d, constChannelPt
 	
 	ast_rtp_instance_activate(instance);
 	
+/*
 	if (c->calltype != SKINNY_CALLTYPE_OUTBOUND) {
 		int peerNonCodecCapability;
 		struct ast_format_cap *peercaps = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
@@ -2522,6 +2545,7 @@ static boolean_t sccp_astwrap_createRtpInstance(constDevicePtr d, constChannelPt
 		ao2_cleanup(joint);
 		ao2_ref(peercaps, -1);
 	}
+*/
 
 	if (c->owner) {
 		ast_channel_stage_snapshot_done(c->owner);
@@ -2542,7 +2566,7 @@ static uint sccp_wrapper_get_dtmf_payload_code(constChannelPtr c)
 {
 	int rtp_code = 0;
 	if (SCCP_DTMFMODE_SKINNY != c->dtmfmode) {
-		rtp_code = ast_rtp_codecs_payload_code(ast_rtp_instance_get_codecs(c->rtp.audio.instance), 0, NULL, AST_RTP_DTMF);
+		rtp_code = ast_rtp_codecs_payload_code(ast_rtp_instance_get_codecs(c->rtp.audio.instance), 0, NULL, AST_RTP_DTMF | AST_RTP_CISCO_DTMF);
 	}
 	sccp_log(DEBUGCAT_RTP)(VERBOSE_PREFIX_3 "%s: Using dtmf rtp_code : %d\n", c->designator, rtp_code);
 	return rtp_code != -1 ? rtp_code : 0;
