@@ -1671,7 +1671,7 @@ static PBX_CHANNEL_TYPE *sccp_astwrap_request(const char *type, struct ast_forma
 				if (audio_codec == SKINNY_CODEC_NONE && (audio_codec = audioCapabilities[0]) == SKINNY_CODEC_NONE) {
 					pbx_log(LOG_NOTICE, "SCCP: remote native audio formats are not compatible with any skinny format. Transcoding required\n");
 					audioCapabilities[0] = SKINNY_CODEC_WIDEBAND_256K;
-					audio_codec  =SKINNY_CODEC_WIDEBAND_256K;
+					audio_codec = SKINNY_CODEC_WIDEBAND_256K;
 				}
 			}
 			ao2_ref(acaps, -1);
@@ -2109,10 +2109,12 @@ static int sccp_astwrap_update_rtp_peer(PBX_CHANNEL_TYPE * ast, PBX_RTP_TYPE * r
 			S_COR(AST_STATE_UP == pbx_channel_state(ast), "RTP", "EarlyRTP"), ast_format_cap_get_names((struct ast_format_cap *) codecs, &codec_buf), nat_active);
 
 		struct ast_format_cap *peercaps = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
-		int peerNonCodecCapability;
-		ast_rtp_codecs_payload_formats(ast_rtp_instance_get_codecs(rtp), peercaps, &peerNonCodecCapability);
-		sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_2 "%s: (update_rtp_peer) remote rtp instance codecs:%s\n", ast_format_cap_get_names(peercaps, &codec_buf));
-		ao2_ref(peercaps, -1);
+		if (peercaps){
+			int peerNonCodecCapability;
+			ast_rtp_codecs_payload_formats(ast_rtp_instance_get_codecs(rtp), peercaps, &peerNonCodecCapability);
+			sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_2 "%s: (update_rtp_peer) remote rtp instance codecs:%s\n", ast_format_cap_get_names(peercaps, &codec_buf));
+			ao2_cleanup(peercaps);
+		}
 
 		if (!c->line) {
 			sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_1 "%s: (update_rtp_peer) NO LINE\n", c->currentDeviceId);
@@ -2404,11 +2406,12 @@ static boolean_t sccp_astwrap_updateRtpMapping(constDevicePtr d,constChannelPtr 
 
 	for (skinny_codec_t i=SKINNY_CODEC_NONE; i<SKINNY_MAX_CAPABILITIES && skinnyprefs[i] != SKINNY_CODEC_NONE; i++) {
 		struct ast_format *format = sccp_astwrap_skinny2ast_format(skinnyprefs[i]);
-		if (format != ast_format_none) {
+		if (format != ast_format_none && format != ast_format_slin16) {
 			int payload_code = ast_rtp_codecs_payload_code(&newrtp, 1, format, 0);
 			ast_rtp_codecs_payloads_set_m_type(&newrtp, NULL, payload_code);
 			const char *mime = ast_rtp_lookup_mime_subtype2(1, format, 0, 0);;
 			int rate = ast_rtp_lookup_sample_rate2(1, format, 0);
+
 			add_payload_mapping_helper(&newrtp, payload_code, rtp_map_filter, mime, rate);
 		}
 	}
@@ -2419,9 +2422,9 @@ static boolean_t sccp_astwrap_updateRtpMapping(constDevicePtr d,constChannelPtr 
 			add_payload_mapping_helper(&newrtp, 105, rtp_map_filter, "cisco-telephone-event", 0);
 			add_payload_mapping_helper(&newrtp, 121, rtp_map_filter, "cisco-telephone-event", 0);
 		}
-		add_payload_mapping_helper(&newrtp, 101, rtp_map_filter, "telephone-event", 0);
-		add_payload_mapping_helper(&newrtp, 11, rtp_map_filter, "L16-256", 16000);				// slin16 -> wideband
+		add_payload_mapping_helper(&newrtp, 101, rtp_map_filter, "telephone-event", 0);				// RFC2833 DTMF
 		add_payload_mapping_helper(&newrtp, 25, rtp_map_filter, "L16", 16000);					// slin16 -> wideband
+		//add_payload_mapping_helper(&newrtp, 11, rtp_map_filter, "L16-256", 16000);				// slin16 -> wideband
 
 		// example add H264 with a different format strings like "a=fmtp:95 packetization-mode=1;max-fs=6336;max-mbps=190080;profile-level-id=42801e"
 		/*
