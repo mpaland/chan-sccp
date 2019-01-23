@@ -642,6 +642,9 @@ static int sccp_astwrap_indicate(PBX_CHANNEL_TYPE * ast, int ind, const void *da
 			break;
 
 		case AST_CONTROL_PROGRESS:
+			if (c->remoteCapabilities.audio[0] == SKINNY_CODEC_NONE) {
+				pbx_retrieve_remote_capabilities(c);
+			}
 			if (c->state != SCCP_CHANNELSTATE_CONNECTED && c->previousChannelState != SCCP_CHANNELSTATE_CONNECTED) {
 				sccp_indicate(d, c, SCCP_CHANNELSTATE_PROGRESS);
 			} else {
