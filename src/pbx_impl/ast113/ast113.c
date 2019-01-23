@@ -1215,8 +1215,7 @@ static boolean_t sccp_astwrap_allocPBXChannel(sccp_channel_t * channel, const vo
 	sccp_log(DEBUGCAT_CODEC)(VERBOSE_PREFIX_3 "allocPBXChannel: using nativeformats=%s fmt=%s\n", ast_format_cap_get_names(ast_channel_nativeformats(pbxDstChannel), &codec_buf), ast_format_get_name(tmpfmt));
 
 	ao2_ref(tmpfmt, -1);
-	ao2_ref(caps, -1);
-	//ao2_cleanup(caps);
+	ao2_cleanup(caps);
 	/* EndCodec */
 
 	ast_channel_context_set(pbxDstChannel, line->context);
