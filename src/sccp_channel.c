@@ -2108,8 +2108,18 @@ void sccp_channel_transfer(channelPtr channel, constDevicePtr device)
 				sccp_indicate(d, channel, SCCP_CHANNELSTATE_CALLTRANSFER);
 			}
 			AUTO_RELEASE(sccp_channel_t, sccp_channel_new , sccp_channel_newcall(channel->line, d, NULL, SKINNY_CALLTYPE_OUTBOUND, pbx_channel_owner, NULL));
+			if (!sccp_channel_new) {
+				pbx_log(LOG_ERROR, "%s: Could not create a new channel to use for gathering the number to transfer to\n", d->id);
+			}
+			if (!iPbx.channel_is_bridged(channel)) {
+				pbx_log(LOG_ERROR, "%s: Channel %s is not bridged yet\n", d->id, channel->designator);
+			}
+			pbx_channel_bridgepeer = iPbx.get_bridged_channel(pbx_channel_owner);
+			if (!pbx_channel_bridgepeer) {
+				pbx_log(LOG_ERROR, "%s: Could not retrieve the bridged_channel from:%s\n", d->id, pbx_channel_name(pbx_channel_owner));
+			}
 
-			if (sccp_channel_new && (pbx_channel_bridgepeer = iPbx.get_bridged_channel(pbx_channel_owner))) {
+			if (sccp_channel_new && pbx_channel_bridgepeer) {
 				pbx_builtin_setvar_helper(sccp_channel_new->owner, "TRANSFEREE", pbx_channel_name(pbx_channel_bridgepeer));
 
 				instance = sccp_device_find_index_for_line(d, sccp_channel_new->line->name);
@@ -2132,13 +2142,15 @@ void sccp_channel_transfer(channelPtr channel, constDevicePtr device)
 				// should go on, even if there is no bridged channel (yet/anymore) ?
 				d->transferChannels.transferer = sccp_channel_retain(sccp_channel_new);
 				pbx_channel_unref(pbx_channel_bridgepeer);
+/*
 			} else if (sccp_channel_new && (pbx_channel_appl(pbx_channel_owner) != NULL)) {
 				// giving up
 				sccp_log((DEBUGCAT_CHANNEL + DEBUGCAT_DEVICE + DEBUGCAT_LINE)) (VERBOSE_PREFIX_3 "%s: Cannot transfer a dialplan application, bridged channel is required on %s\n", d->id, channel->designator);
 				sccp_dev_displayprompt(d, instance, channel->callid, SKINNY_DISP_CAN_NOT_COMPLETE_TRANSFER, SCCP_DISPLAYSTATUS_TIMEOUT);
 				channel->channelStateReason = SCCP_CHANNELSTATEREASON_NORMAL;
 				sccp_indicate(d, channel, SCCP_CHANNELSTATE_CONGESTION);
-				sccp_channel_release(&d->transferChannels.transferee);				/* explicit release */
+				sccp_channel_release(&d->transferChannels.transferee);				// explicit release
+*/				
 			} else {
 				// giving up
 				if (!sccp_channel_new) {
