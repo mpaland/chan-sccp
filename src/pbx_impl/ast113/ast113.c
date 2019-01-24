@@ -2367,12 +2367,12 @@ static int sccp_astwrap_callerid_presentation(PBX_CHANNEL_TYPE *pbx_chan)
 	return CALLERID_PRESENTATION_FORBIDDEN;
 }
 
-static void add_payload_mapping_helper(struct ast_rtp_codecs *newrtp, int payload_code, char *rtp_map_filter, const char *mime, int rate)
+static void add_payload_mapping_helper(struct ast_rtp_codecs *codecs, int payload_code, char *rtp_map_filter, const char *mime, int rate)
 {
 	sccp_log(DEBUGCAT_CODEC)(VERBOSE_PREFIX_3 "SCCP: update rtpmap: payload:%d, mime:%s, rate:%d\n", payload_code, mime, rate);
-	ast_rtp_codecs_payloads_set_m_type(newrtp, NULL, payload_code);
-	if (ast_rtp_codecs_payloads_set_rtpmap_type_rate(newrtp, NULL, payload_code, rtp_map_filter, (char *)mime, 0, rate)) {
-		ast_rtp_codecs_payloads_unset(newrtp, NULL, payload_code);
+	ast_rtp_codecs_payloads_set_m_type(codecs, NULL, payload_code);
+	if (ast_rtp_codecs_payloads_set_rtpmap_type_rate(codecs, NULL, payload_code, rtp_map_filter, (char *)mime, 0, rate)) {
+		ast_rtp_codecs_payloads_unset(codecs, NULL, payload_code);
 	}
 }
 
@@ -2380,7 +2380,7 @@ static boolean_t sccp_astwrap_updateRtpMapping(constDevicePtr d,constChannelPtr 
 {
 	boolean_t res = FALSE;
 	PBX_RTP_TYPE *instance = rtp->instance;
-	struct ast_rtp_codecs newrtp = AST_RTP_CODECS_NULL_INIT;
+	struct ast_rtp_codecs codecs = AST_RTP_CODECS_NULL_INIT;
 	char *rtp_map_filter = NULL;
 	skinny_codec_t * skinnyprefs = NULL;
 	switch(rtp->type) {
@@ -2388,48 +2388,47 @@ static boolean_t sccp_astwrap_updateRtpMapping(constDevicePtr d,constChannelPtr 
 			rtp_map_filter = "audio";
 			skinnyprefs = (skinny_codec_t * )c->preferences.audio;
 			break;
-			
 #if CS_SCCP_VIDEO
 		case SCCP_RTP_VIDEO:
 			rtp_map_filter = "video";
 			skinnyprefs = (skinny_codec_t * )c->preferences.video;
 			break;
-#endif			
+#endif
 		default:
 			pbx_log(LOG_ERROR, "%s: (wrapper_create_rtp) unknown/unhandled rtp type, returning instance for now\n", c->designator);
 			return res;
 	}
 
-	if (ast_rtp_codecs_payloads_initialize(&newrtp)) {
+	if (ast_rtp_codecs_payloads_initialize(&codecs)) {
 		return res;
 	}
 
 	for (skinny_codec_t i=SKINNY_CODEC_NONE; i<SKINNY_MAX_CAPABILITIES && skinnyprefs[i] != SKINNY_CODEC_NONE; i++) {
 		struct ast_format *format = sccp_astwrap_skinny2ast_format(skinnyprefs[i]);
 		if (format != ast_format_none && format != ast_format_slin16) {
-			int payload_code = ast_rtp_codecs_payload_code(&newrtp, 1, format, 0);
-			ast_rtp_codecs_payloads_set_m_type(&newrtp, NULL, payload_code);
+			int payload_code = ast_rtp_codecs_payload_code(ast_rtp_instance_get_codecs(instance), 1, format, 0);
+			ast_rtp_codecs_payloads_set_m_type(ast_rtp_instance_get_codecs(instance), NULL, payload_code);
 			const char *mime = ast_rtp_lookup_mime_subtype2(1, format, 0, 0);;
 			int rate = ast_rtp_lookup_sample_rate2(1, format, 0);
 
-			add_payload_mapping_helper(&newrtp, payload_code, rtp_map_filter, mime, rate);
+			add_payload_mapping_helper(&codecs, payload_code, rtp_map_filter, mime, rate);
 		}
 	}
 	// add exceptions
 	if (rtp->type == SCCP_RTP_AUDIO) {
 		if (SCCP_DTMFMODE_SKINNY == d->dtmfmode) {
-			add_payload_mapping_helper(&newrtp, 96, rtp_map_filter, "telephone-event", 0);
-			add_payload_mapping_helper(&newrtp, 105, rtp_map_filter, "cisco-telephone-event", 0);
-			add_payload_mapping_helper(&newrtp, 121, rtp_map_filter, "cisco-telephone-event", 0);
+			add_payload_mapping_helper(&codecs, 96, rtp_map_filter, "telephone-event", 0);
+			add_payload_mapping_helper(&codecs, 105, rtp_map_filter, "cisco-telephone-event", 0);
+			add_payload_mapping_helper(&codecs, 121, rtp_map_filter, "cisco-telephone-event", 0);
 		}
-		add_payload_mapping_helper(&newrtp, 101, rtp_map_filter, "telephone-event", 0);				// RFC2833 DTMF
-		add_payload_mapping_helper(&newrtp, 25, rtp_map_filter, "L16", 16000);					// slin16 -> wideband
-		//add_payload_mapping_helper(&newrtp, 11, rtp_map_filter, "L16-256", 16000);				// slin16 -> wideband
+		add_payload_mapping_helper(&codecs, 101, rtp_map_filter, "telephone-event", 0);				// RFC2833 DTMF
+		add_payload_mapping_helper(&codecs, 25, rtp_map_filter, "L16", 16000);					// slin16 -> wideband
+		//add_payload_mapping_helper(&codecs, 11, rtp_map_filter, "L16-256", 16000);				// slin16 -> wideband
 
 		// example add H264 with a different format strings like "a=fmtp:95 packetization-mode=1;max-fs=6336;max-mbps=190080;profile-level-id=42801e"
 		/*
-		sccp_astwrap_add_payload_mapping(&newrtp, 96, rtp_map_filter, "H264", 16000);				// H264
-		sccp_astwrap_add_payload_mapping(&newrtp, 97, rtp_map_filter, "H264", 16000);				// H264
+		sccp_astwrap_add_payload_mapping(&codecs, 96, rtp_map_filter, "H264", 16000);				// H264
+		sccp_astwrap_add_payload_mapping(&codecs, 97, rtp_map_filter, "H264", 16000);				// H264
 		struct ast_format *format_parsed;
 		format_parsed = ast_format_parse_sdp_fmtp(format, fmtp_string);
 		if (format_parsed) {
@@ -2441,11 +2440,12 @@ static boolean_t sccp_astwrap_updateRtpMapping(constDevicePtr d,constChannelPtr 
 		}
 		*/
 	}
-	
-	// copy newrtp back to instance
-	ast_rtp_codecs_payloads_copy(&newrtp, ast_rtp_instance_get_codecs(instance), instance);
-	ast_rtp_codecs_set_framing(ast_rtp_instance_get_codecs(instance), ast_format_cap_get_framing(ast_channel_nativeformats(c->owner)));
-	ast_rtp_codecs_payloads_destroy(&newrtp);
+
+	// copy codecs back to instance
+	//ast_rtp_codecs_set_framing(ast_rtp_instance_get_codecs(instance), ast_format_cap_get_framing(ast_channel_nativeformats(c->owner)));
+	ast_rtp_codecs_set_framing(&codecs, ast_format_cap_get_framing(ast_channel_nativeformats(c->owner)));
+	ast_rtp_codecs_payloads_copy(&codecs, ast_rtp_instance_get_codecs(instance), instance);
+	//ast_rtp_codecs_payloads_destroy(&codecs);
 	return TRUE;
 }
 
@@ -2482,14 +2482,13 @@ static boolean_t sccp_astwrap_createRtpInstance(constDevicePtr d, constChannelPt
 			tos = d->audio_tos;
 			cos = d->audio_cos;
 			break;
-			
 #if CS_SCCP_VIDEO
 		case SCCP_RTP_VIDEO:
 			tos = d->video_tos;
 			cos = d->video_cos;
 			fd_offset = 2;
 			break;
-#endif			
+#endif
 		default:
 			pbx_log(LOG_ERROR, "%s: (wrapper_create_rtp) unknown/unhandled rtp type, returning instance for now\n", c->designator);
 			return TRUE;
@@ -2500,6 +2499,7 @@ static boolean_t sccp_astwrap_createRtpInstance(constDevicePtr d, constChannelPt
 		ast_channel_set_fd(c->owner, fd_offset, ast_rtp_instance_fd(instance, 0));		// RTP
 		ast_channel_set_fd(c->owner, fd_offset + 1, ast_rtp_instance_fd(instance, 1));		// RTCP
 	}
+
 	ast_rtp_instance_set_prop(instance, AST_RTP_PROPERTY_RTCP, 1);
 	if (rtp->type == SCCP_RTP_AUDIO) {
 		ast_rtp_instance_set_prop(instance, AST_RTP_PROPERTY_DTMF, 1);
@@ -2509,15 +2509,12 @@ static boolean_t sccp_astwrap_createRtpInstance(constDevicePtr d, constChannelPt
 		}
 	}
 	ast_rtp_instance_set_qos(instance, tos, cos, "SCCP RTP");
-	
+
 	if (!sccp_astwrap_updateRtpMapping(d, c, rtp)) {
 		pbx_channel_set_hangupcause(c->owner, AST_CAUSE_BEARERCAPABILITY_NOTAVAIL);
 		pbx_log(LOG_ERROR, "Could not initialize codecs for negotiation on session '%s'\n", c->designator);
 		return FALSE;
 	}
-	
-	ast_rtp_instance_activate(instance);
-	
 /*
 	if (c->calltype != SKINNY_CALLTYPE_OUTBOUND) {
 		int peerNonCodecCapability;
@@ -2551,6 +2548,7 @@ static boolean_t sccp_astwrap_createRtpInstance(constDevicePtr d, constChannelPt
 		ao2_ref(peercaps, -1);
 	}
 */
+	ast_rtp_instance_activate(instance);
 
 	if (c->owner) {
 		ast_channel_stage_snapshot_done(c->owner);
