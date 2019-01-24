@@ -2445,6 +2445,8 @@ static boolean_t sccp_astwrap_updateRtpMapping(constDevicePtr d,constChannelPtr 
 	//ast_rtp_codecs_set_framing(ast_rtp_instance_get_codecs(instance), ast_format_cap_get_framing(ast_channel_nativeformats(c->owner)));
 	ast_rtp_codecs_set_framing(&codecs, ast_format_cap_get_framing(ast_channel_nativeformats(c->owner)));
 	ast_rtp_codecs_payloads_copy(&codecs, ast_rtp_instance_get_codecs(instance), instance);
+
+	// remarking the next line out, removes the astobj2 issue reported in #445, but it should not be
 	//ast_rtp_codecs_payloads_destroy(&codecs);
 	return TRUE;
 }
