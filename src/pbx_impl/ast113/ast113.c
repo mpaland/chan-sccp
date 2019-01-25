@@ -2508,6 +2508,8 @@ static boolean_t sccp_astwrap_createRtpInstance(constDevicePtr d, constChannelPt
 		if (c->dtmfmode == SCCP_DTMFMODE_SKINNY) {
 			ast_rtp_instance_set_prop(instance, AST_RTP_PROPERTY_DTMF_COMPENSATE, 1);
 			ast_rtp_instance_dtmf_mode_set(instance, AST_RTP_DTMF_MODE_INBAND);
+		} else {
+			ast_rtp_instance_dtmf_mode_set(instance, AST_RTP_DTMF_MODE_RFC2833);
 		}
 	}
 	ast_rtp_instance_set_qos(instance, tos, cos, "SCCP RTP");
@@ -2571,7 +2573,8 @@ static uint sccp_wrapper_get_dtmf_payload_code(constChannelPtr c)
 {
 	int rtp_code = 0;
 	if (SCCP_DTMFMODE_SKINNY != c->dtmfmode) {
-		rtp_code = ast_rtp_codecs_payload_code(ast_rtp_instance_get_codecs(c->rtp.audio.instance), 0, NULL, AST_RTP_DTMF | AST_RTP_CISCO_DTMF);
+		rtp_code = ast_rtp_codecs_payload_code(ast_rtp_instance_get_codecs(c->rtp.audio.instance), 0, NULL, AST_RTP_DTMF);
+		//rtp_code = ast_rtp_codecs_payload_code(ast_rtp_instance_get_codecs(c->rtp.audio.instance), 0, NULL, AST_RTP_CISCO_DTMF);
 	}
 	sccp_log(DEBUGCAT_RTP)(VERBOSE_PREFIX_3 "%s: Using dtmf rtp_code : %d\n", c->designator, rtp_code);
 	return rtp_code != -1 ? rtp_code : 0;
