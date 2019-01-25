@@ -2123,7 +2123,7 @@ static int sccp_astwrap_update_rtp_peer(PBX_CHANNEL_TYPE * ast, PBX_RTP_TYPE * r
 		if (peercaps){
 			int peerNonCodecCapability;
 			ast_rtp_codecs_payload_formats(ast_rtp_instance_get_codecs(rtp), peercaps, &peerNonCodecCapability);
-			sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_2 "%s: (update_rtp_peer) remote rtp instance codecs:%s\n", ast_format_cap_get_names(peercaps, &codec_buf));
+			sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_2 "%s: (update_rtp_peer) remote rtp instance codecs:%s\n", c->currentDeviceId, ast_format_cap_get_names(peercaps, &codec_buf));
 			ao2_cleanup(peercaps);
 		}
 
@@ -2531,7 +2531,6 @@ static boolean_t sccp_astwrap_createRtpInstance(constDevicePtr d, constChannelPt
 		pbx_log(LOG_ERROR, "Could not initialize codecs for negotiation on session '%s'\n", c->designator);
 		return FALSE;
  	}
- 	
 	ast_rtp_instance_set_channel_id(instance, ast_channel_uniqueid(c->owner));
 	ast_rtp_instance_activate(instance);
 
