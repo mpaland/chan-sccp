@@ -2552,6 +2552,7 @@ static boolean_t sccp_astwrap_createRtpInstance(constDevicePtr d, constChannelPt
 		ao2_ref(peercaps, -1);
 	}
 */
+	ast_rtp_instance_set_channel_id(instance, ast_channel_uniqueid(c->owner));
 	ast_rtp_instance_activate(instance);
 
 	if (c->owner) {
