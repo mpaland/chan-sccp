@@ -2083,6 +2083,36 @@ static enum ast_rtp_glue_result sccp_astwrap_get_vrtp_info(PBX_CHANNEL_TYPE * as
 	return res;
 }
 
+/*
+static void retrieve_remote_capabilities_from_caps(sccp_channel_t *c, const struct ast_format_cap *codecs)
+{
+	if (ast_format_cap_has_type(codecs, AST_MEDIA_TYPE_AUDIO) && c->remoteCapabilities.audio[0] == SKINNY_CODEC_NONE) {
+		char buf[512];
+		struct ast_format_cap *acaps = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
+		if (acaps) {
+			ast_format_cap_append_from_cap(acaps, codecs, AST_MEDIA_TYPE_AUDIO);
+			sccp_astwrap_getSkinnyFormatMultiple(acaps, c->remoteCapabilities.audio, ARRAY_LEN(c->remoteCapabilities.audio));
+			sccp_codec_multiple2str(buf, sizeof(buf) - 1, c->remoteCapabilities.audio, ARRAY_LEN(c->remoteCapabilities.audio));
+			sccp_log(DEBUGCAT_CODEC) (VERBOSE_PREFIX_4 "set remote audio caps: %s\n", buf);
+			ao2_ref(acaps, -1);
+		}
+	}
+#if CS_SCCP_VIDEO
+	if (ast_format_cap_has_type(codecs, AST_MEDIA_TYPE_VIDEO) && c->remoteCapabilities.video[0] == SKINNY_CODEC_NONE) {
+		char buf[512];
+		struct ast_format_cap *vcaps = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
+		if (vcaps) {
+			ast_format_cap_append_from_cap(vcaps, codecs, AST_MEDIA_TYPE_VIDEO);
+			sccp_astwrap_getSkinnyFormatMultiple(vcaps, c->remoteCapabilities.video, ARRAY_LEN(c->remoteCapabilities.video));
+			sccp_codec_multiple2str(buf, sizeof(buf) - 1, c->remoteCapabilities.video, ARRAY_LEN(c->remoteCapabilities.video));
+			sccp_log(DEBUGCAT_CODEC) (VERBOSE_PREFIX_4 "set remote video caps: %s\n", buf);
+			ao2_ref(vcaps, -1);
+		}
+	}
+#endif
+}
+*/
+
 static int sccp_astwrap_update_rtp_peer(PBX_CHANNEL_TYPE * ast, PBX_RTP_TYPE * rtp, PBX_RTP_TYPE * vrtp, PBX_RTP_TYPE * trtp, const struct ast_format_cap *codecs, int nat_active)
 {
 	//AUTO_RELEASE(sccp_channel_t, c , get_sccp_channel_from_pbx_channel(ast));				// not following the refcount rules... channel is already retained
@@ -2097,7 +2127,7 @@ static int sccp_astwrap_update_rtp_peer(PBX_CHANNEL_TYPE * ast, PBX_RTP_TYPE * r
 			break;
 		}
 
-		if (!codecs) {
+		if (!codecs || ast_format_cap_count(codecs) <= 0) {
 			sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_1 "%s: (update_rtp_peer) NO Codecs\n", c->currentDeviceId);
 			result = -1;
 			break;
@@ -2105,13 +2135,7 @@ static int sccp_astwrap_update_rtp_peer(PBX_CHANNEL_TYPE * ast, PBX_RTP_TYPE * r
 		sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_2 "%s: (update_rtp_peer) stage: %s, remote codecs capabilty: %s, nat_active: %d\n", c->currentDeviceId,
 			S_COR(AST_STATE_UP == pbx_channel_state(ast), "RTP", "EarlyRTP"), ast_format_cap_get_names((struct ast_format_cap *) codecs, &codec_buf), nat_active);
 
-		struct ast_format_cap *peercaps = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
-		if (peercaps){
-			int peerNonCodecCapability;
-			ast_rtp_codecs_payload_formats(ast_rtp_instance_get_codecs(rtp), peercaps, &peerNonCodecCapability);
-			sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_2 "%s: (update_rtp_peer) remote rtp instance codecs:%s\n", c->currentDeviceId, ast_format_cap_get_names(peercaps, &codec_buf));
-			ao2_cleanup(peercaps);
-		}
+		// retrieve_remote_capabilities_from_caps(c, codecs);
 
 		if (!c->line) {
 			sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_1 "%s: (update_rtp_peer) NO LINE\n", c->currentDeviceId);
@@ -2166,7 +2190,7 @@ static int sccp_astwrap_update_rtp_peer(PBX_CHANNEL_TYPE * ast, PBX_RTP_TYPE * r
 			instance = trtp;
 		}
 
-		if (d->directrtp && d->nat < SCCP_NAT_ON && !nat_active && !c->conference) {			// asume directrtp
+		if (d->directrtp && d->nat < SCCP_NAT_ON && !nat_active && !c->conference) {			// assume directrtp
 			ast_rtp_instance_get_remote_address(instance, &sin_tmp);
 			memcpy(&sas, &sin_tmp, sizeof(struct sockaddr_storage));
 			//ast_sockaddr_to_sin(&sin_tmp, &sin);
