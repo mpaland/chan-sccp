@@ -2386,14 +2386,14 @@ static boolean_t sccp_astwrap_createRtpInstance(constDevicePtr d, constChannelPt
 	/* rest below should be moved out of here (refactoring required) */
 	PBX_RTP_TYPE *instance = rtp->instance;
 	char *rtp_map_filter = NULL;
-	enum ast_media_type format_type = AST_MEDIA_TYPE_AUDIO;
+	//enum ast_media_type format_type = AST_MEDIA_TYPE_AUDIO;
 	int fd_offset = 0;
 	switch(rtp->type) {
 		case SCCP_RTP_AUDIO:
 			tos = d->audio_tos;
 			cos = d->audio_cos;
 			rtp_map_filter = "audio";
-			format_type = AST_MEDIA_TYPE_AUDIO;
+			//format_type = AST_MEDIA_TYPE_AUDIO;
 			break;
 			
 #if CS_SCCP_VIDEO
@@ -2401,7 +2401,7 @@ static boolean_t sccp_astwrap_createRtpInstance(constDevicePtr d, constChannelPt
 			tos = d->video_tos;
 			cos = d->video_cos;
 			rtp_map_filter = "video";
-			format_type = AST_MEDIA_TYPE_VIDEO;
+			//format_type = AST_MEDIA_TYPE_VIDEO;
 			fd_offset = 2;
 			break;
 #endif			
@@ -2428,50 +2428,21 @@ static boolean_t sccp_astwrap_createRtpInstance(constDevicePtr d, constChannelPt
 	ast_rtp_instance_set_qos(instance, tos, cos, "SCCP RTP");
 
 	//sccp_log_and(DEBUGCAT_CODEC + DEBUGCAT_HIGH)(VERBOSE_PREFIX_3 "%s: (create_rtp) Building rtpmap\n", c->designator);
-	struct ast_rtp_codecs newrtp = AST_RTP_CODECS_NULL_INIT;
-	ast_rtp_codecs_payloads_initialize(&newrtp);
-	for (uint x = 0; x < ast_format_cap_count(ast_channel_nativeformats(c->owner)); x++){
-		struct ast_format *format = ast_format_cap_get_format(ast_channel_nativeformats(c->owner), x);
-		if (ast_format_get_type(format) == format_type) {
-			int rtp_code = ast_rtp_codecs_payload_code(ast_rtp_instance_get_codecs(instance), 1, format, 0);	// ??
-			if (rtp_code != -1) {
-				/* Fixup mime types and rates */
-				const char *mime;
-				int rate = -1;
-				int skinny_codec = SKINNY_CODEC_NONE;
-				int32_t skinny_payload = 0;
-				if (
-					(mime = ast_rtp_lookup_mime_subtype2(1, format, 0, 0)) &&				// should we use sccp_codec.c table to match ?
-					(rate = ast_rtp_lookup_sample_rate2(1, format, 0)) &&					// should we use updateCapabilities sample rate ?
-					(skinny_codec = (int)pbx_codec2skinny_codec(ast_format_compatibility_format2bitfield(format))) != SKINNY_CODEC_NONE
-				) {
-					if ((skinny_payload = codec2rtp_payload_type(skinny_codec)) < 0) {
-						skinny_payload = rtp_code;							// fall back to asterisk mapping and hope for a good outcome
-					}
-					sccp_log(DEBUGCAT_CODEC)(VERBOSE_PREFIX_2 "%s: update rtpmap: format:%s, rtp_code:%d -> payload:%d, mime:%s, rate:%d\n",
-						c->designator, pbx_getformatname(format), rtp_code, skinny_payload, mime, rate);
-					if (!ast_rtp_codecs_payloads_set_rtpmap_type_rate(&newrtp, instance, skinny_payload, rtp_map_filter, (char *)mime, 0, rate)) {
-						ast_rtp_codecs_payloads_set_m_type(&newrtp, instance, skinny_payload);
-					} else {
-						ast_rtp_codecs_payloads_unset(&newrtp, instance, skinny_payload);
-					}
-				}
-			}
-		}
-	}
+	struct ast_rtp_codecs codecs = AST_RTP_CODECS_NULL_INIT;
+	ast_rtp_codecs_payloads_initialize(&codecs);
 	//sccp_log_and(DEBUGCAT_CODEC + DEBUGCAT_HIGH)(VERBOSE_PREFIX_3 "%s: (create_rtp) Adding: DTMF\n", c->designator);
 	if (rtp->type == SCCP_RTP_AUDIO) {
 		sccp_log(DEBUGCAT_CODEC)(VERBOSE_PREFIX_2 "%s: update rtpmap: format:%s, payload:%d, mime:%s, rate:%d\n",
 			c->designator, "CISCO-DTMF", 101, "audio", 0);
-		if (!ast_rtp_codecs_payloads_set_rtpmap_type(&newrtp, instance, 101, rtp_map_filter, "telephone-event", 0)) {
-			ast_rtp_codecs_payloads_set_m_type(&newrtp, instance, 101);
-		} else {
-			ast_rtp_codecs_payloads_unset(&newrtp, instance, 101);
+		ast_rtp_codecs_payloads_set_m_type(&codecs, instance, 101);
+		if (ast_rtp_codecs_payloads_set_rtpmap_type(&codecs, instance, 101, rtp_map_filter, "telephone-event", 0)) {
+			ast_rtp_codecs_payloads_unset(&codecs, instance, 101);
 		}
+		ast_rtp_codecs_payload_replace_format(&codecs, 25, ast_format_slin16);					// replace slin16 RTPPayloadType=25 (wideband-256)
 	}
-	ast_rtp_codecs_set_framing(&newrtp, ast_format_cap_get_framing(ast_channel_nativeformats(c->owner)));
+	ast_rtp_codecs_set_framing(&codecs, ast_format_cap_get_framing(ast_channel_nativeformats(c->owner)));
 
-	ast_rtp_codecs_payloads_copy(&newrtp, ast_rtp_instance_get_codecs(instance), instance);
+	ast_rtp_codecs_payloads_copy(&codecs, ast_rtp_instance_get_codecs(instance), instance);
 	//sccp_log_and(DEBUGCAT_CODEC + DEBUGCAT_HIGH)(VERBOSE_PREFIX_3 "%s: (create_rtp) Done rtpmap\n", c->designator);
 
 	ast_rtp_instance_set_channel_id(instance, ast_channel_uniqueid(c->owner));
