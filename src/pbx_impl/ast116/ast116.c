@@ -519,6 +519,25 @@ EXIT_FUNC:
 	return frame;
 }
 
+/*!
+ * \brief Find Asterisk/PBX channel by linkid
+ *
+ * \param ast   pbx channel
+ * \param data  linkId as void *
+ *
+ * \return int
+ */
+static int pbx_find_channel_by_linkid(PBX_CHANNEL_TYPE * ast, const void *data)
+{
+	const char *linkedId = (char *) data;
+
+	if (!linkedId) {
+		return 0;
+	}
+
+	return !pbx_channel_pbx(ast) && ast_channel_linkedid(ast) && (!strcasecmp(ast_channel_linkedid(ast), linkedId)) && !pbx_channel_masq(ast);
+}
+
 static void pbx_retrieve_remote_capabilities(sccp_channel_t *c)
 {
 	pbx_assert(c != NULL);
@@ -545,7 +564,6 @@ static void pbx_retrieve_remote_capabilities(sccp_channel_t *c)
 
 			if (ast_format_cap_count(ast_channel_nativeformats(remotePeer)) > 0) {
 				//struct ast_format *ast_format_cap_get_best_by_type(const struct ast_format_cap *cap, enum ast_media_type type);
-				
 				struct ast_format_cap *joint = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 				if (joint) {
 					struct ast_format *best_fmt_cap = NULL;
