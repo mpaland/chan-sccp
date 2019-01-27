@@ -2440,24 +2440,30 @@ static boolean_t sccp_astwrap_createRtpInstance(constDevicePtr d, constChannelPt
 		ast_channel_set_fd(c->owner, fd_offset + 1, ast_rtp_instance_fd(instance, 1));		// RTCP
 	}
 	ast_rtp_instance_set_prop(instance, AST_RTP_PROPERTY_RTCP, 1);
-	if (rtp->type == SCCP_RTP_AUDIO) {
-		ast_rtp_instance_set_prop(instance, AST_RTP_PROPERTY_DTMF, 1);
-		if (c->dtmfmode == SCCP_DTMFMODE_SKINNY) {
-			ast_rtp_instance_set_prop(instance, AST_RTP_PROPERTY_DTMF_COMPENSATE, 1);
-			ast_rtp_instance_dtmf_mode_set(instance, AST_RTP_DTMF_MODE_INBAND);
-		} else {
-			ast_rtp_instance_dtmf_mode_set(instance, AST_RTP_DTMF_MODE_RFC2833);
-		}
-	}
 	ast_rtp_instance_set_qos(instance, tos, cos, "SCCP RTP");
 
 	if (rtp->type == SCCP_RTP_AUDIO) {
+		ast_rtp_instance_set_prop(instance, AST_RTP_PROPERTY_DTMF, 1);
 		sccp_log(DEBUGCAT_CODEC)(VERBOSE_PREFIX_2 "%s: update rtpmap: format:%s, payload:%d, mime:%s, rate:%d\n",
-			c->designator, "CISCO-DTMF", 101, "audio", 0);
-		ast_rtp_codecs_payloads_set_m_type(ast_rtp_instance_get_codecs(instance), instance, 101);
-		if (ast_rtp_codecs_payloads_set_rtpmap_type(ast_rtp_instance_get_codecs(instance), instance, 101, rtp_map_filter, "telephone-event", 0)) {
-			ast_rtp_codecs_payloads_unset(ast_rtp_instance_get_codecs(instance), instance, 101);
+			c->designator, "telephone-event", c->dtmfmode == SCCP_DTMFMODE_SKINNY ? 121 : 101, "audio", 0);
+		if (c->dtmfmode == SCCP_DTMFMODE_SKINNY) {
+			/* untested */
+			//ast_rtp_codecs_payloads_set_m_type(ast_rtp_instance_get_codecs(instance), instance, 121);
+			//if (ast_rtp_codecs_payloads_set_rtpmap_type(ast_rtp_instance_get_codecs(instance), instance, 121, rtp_map_filter, "cisco-telephone-event", 0)) {
+			//	ast_rtp_codecs_payloads_unset(ast_rtp_instance_get_codecs(instance), instance, 121);
+			//}
+			/* \untested */
+			ast_rtp_instance_set_prop(instance, AST_RTP_PROPERTY_DTMF_COMPENSATE, 1);
+			ast_rtp_instance_dtmf_mode_set(instance, AST_RTP_DTMF_MODE_INBAND);
+		} else {
+			ast_rtp_codecs_payloads_set_m_type(ast_rtp_instance_get_codecs(instance), instance, 101);
+			if (ast_rtp_codecs_payloads_set_rtpmap_type(ast_rtp_instance_get_codecs(instance), instance, 101, rtp_map_filter, "telephone-event", 0)) {
+				ast_rtp_codecs_payloads_unset(ast_rtp_instance_get_codecs(instance), instance, 101);
+			}
+			ast_rtp_instance_dtmf_mode_set(instance, AST_RTP_DTMF_MODE_RFC2833);
 		}
+		sccp_log(DEBUGCAT_CODEC)(VERBOSE_PREFIX_2 "%s: update rtpmap: format:%s, payload:%d, mime:%s, rate:%d\n",
+			c->designator, "slin16", 25, "audio", 16000);
 		ast_rtp_codecs_payload_replace_format(ast_rtp_instance_get_codecs(instance), 25, ast_format_slin16);				// replace slin16 RTPPayloadType=25 (wideband-256)
 	}
 	ast_rtp_codecs_set_framing(ast_rtp_instance_get_codecs(instance), ast_format_cap_get_framing(ast_channel_nativeformats(c->owner)));
@@ -2479,9 +2485,12 @@ static uint sccp_wrapper_get_codec_framing(constChannelPtr c)
 static uint sccp_wrapper_get_dtmf_payload_code(constChannelPtr c)
 {
 	int rtp_code = 0;
-	if (SCCP_DTMFMODE_SKINNY != c->dtmfmode) {
-		rtp_code = ast_rtp_codecs_payload_code(ast_rtp_instance_get_codecs(c->rtp.audio.instance), 0, NULL, AST_RTP_DTMF);
-		//rtp_code = ast_rtp_codecs_payload_code(ast_rtp_instance_get_codecs(c->rtp.audio.instance), 0, NULL, AST_RTP_CISCO_DTMF);
+	if (SCCP_DTMFMODE_SKINNY == c->dtmfmode) {
+		/* untested*/
+		//rtp_code = ast_rtp_codecs_payload_code(ast_rtp_instance_get_codecs(c->rtp.audio.instance), 0, NULL, AST_RTP_CISCO_DTMF);	// 121
+		/* \untested */
+	} else {
+		rtp_code = ast_rtp_codecs_payload_code(ast_rtp_instance_get_codecs(c->rtp.audio.instance), 0, NULL, AST_RTP_DTMF);		// 101
 	}
 	sccp_log(DEBUGCAT_RTP)(VERBOSE_PREFIX_3 "%s: Using dtmf rtp_code : %d\n", c->designator, rtp_code);
 	return rtp_code != -1 ? rtp_code : 0;
