@@ -611,10 +611,12 @@ channelPtr sccp_pbx_hangup(constChannelPtr channel)
 
 		/* requesting statistics */
 		sccp_channel_StatisticsRequest(c);
-		sccp_channel_clean(c);
-		return c;								/* returning unretained so that sccp_wrapper_asterisk113_hangup can clear out the last reference */
 	}
-	return NULL;
+	/* always clean the channel, also when no device could be found: cleaning drops the device/linedevice references the
+	 * channel holds, and returning it lets sccp_astwrap_hangup() release the tech_pvt reference. Returning NULL here used to
+	 * leak the channel (and through it line and device) whenever a device-less channel was hung up. */
+	sccp_channel_clean(c);
+	return c;									/* returning unretained so that sccp_astwrap_hangup can clear out the last reference */
 }
 
 /*!

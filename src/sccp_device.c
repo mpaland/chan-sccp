@@ -28,6 +28,7 @@
 #include "sccp_indicate.h"
 #include "sccp_utils.h"
 #include "sccp_atomic.h"
+#include "sccp_conference.h"
 //#include "sccp_devstate.h"
 #include "sccp_featureParkingLot.h"
 #include "sccp_labels.h"
@@ -2575,6 +2576,35 @@ int __sccp_device_destroy(const void *ptr)
 	}
 
 	sccp_log((DEBUGCAT_DEVICE + DEBUGCAT_CONFIG)) (VERBOSE_PREFIX_1 "%s: Destroying Device\n", d->id);
+
+	/* safety net: a device reaching its destructor must have been cleaned (sccp_dev_clean). Anything still referenced here
+	 * would be leaked together with the objects it points to (device <-> channel <-> line reference cycles). */
+	if (d->active_channel) {
+		pbx_log(LOG_WARNING, "%s: (device_destroy) active channel %s still referenced, releasing\n", d->id, d->active_channel->designator);
+		sccp_channel_release(&d->active_channel);
+	}
+	if (d->currentLine) {
+		pbx_log(LOG_WARNING, "%s: (device_destroy) current line %s still referenced, releasing\n", d->id, d->currentLine->name);
+		sccp_line_release(&d->currentLine);
+	}
+#ifdef CS_SCCP_CONFERENCE
+	if (d->conference) {
+		pbx_log(LOG_WARNING, "%s: (device_destroy) conference still referenced, releasing\n", d->id);
+		sccp_conference_release(&d->conference);
+	}
+#endif
+	if (d->buttonTemplate) {
+		pbx_log(LOG_WARNING, "%s: (device_destroy) button template still present, releasing its line references\n", d->id);
+		sccp_dev_freeButtonTemplate(d);
+	}
+	if (d->lineButtons.instance) {
+		pbx_log(LOG_WARNING, "%s: (device_destroy) line button array still present, releasing it\n", d->id);
+		sccp_linedevice_deleteButtonsArray(d);
+	}
+	if (d->session) {
+		pbx_log(LOG_WARNING, "%s: (device_destroy) session still referenced, releasing\n", d->id);
+		sccp_device_setSession(d, NULL);
+	}
 
 	// cleanup dynamic allocated during sccp_config (i.e. STRINGPTR)
 	sccp_config_cleanup_dynamically_allocated_memory(d, SCCP_CONFIG_DEVICE_SEGMENT);

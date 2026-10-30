@@ -2400,13 +2400,31 @@ int __sccp_channel_destroy(const void * data)
 		iPbx.set_owner(channel, NULL);
 	}
 
-	/* destroy immutables, by casting away const */
-	sccp_free(*(char **)&channel->musicclass);
-	sccp_free(*(char **)&channel->designator);
 	if (channel->privateData) {
+		/* safety net: sccp_channel_clean() should have released these already */
+		if (channel->privateData->device) {
+			pbx_log(LOG_WARNING, "%s: (channel_destroy) device still referenced, releasing\n", channel->designator);
+			sccp_device_release(&channel->privateData->device);
+		}
+		if (channel->privateData->ld) {
+			pbx_log(LOG_WARNING, "%s: (channel_destroy) linedevice still referenced, releasing\n", channel->designator);
+			sccp_linedevice_release(&channel->privateData->ld);
+		}
+		sccp_threadpool_job_t * job = NULL;
+		while ((job = SCCP_LIST_REMOVE_HEAD(&channel->privateData->cleanup_jobs, list))) {
+			pbx_log(LOG_WARNING, "%s: (channel_destroy) running leftover cleanup job\n", channel->designator);
+			if (job->arg_cleanup) {
+				job->arg_cleanup(job->arg);
+			}
+			sccp_free(job);
+		}
 		SCCP_LIST_HEAD_DESTROY(&(channel->privateData->cleanup_jobs));
 		sccp_free(*(struct sccp_private_channel_data **)&channel->privateData);
 	}
+
+	/* destroy immutables, by casting away const */
+	sccp_free(*(char **)&channel->musicclass);
+	sccp_free(*(char **)&channel->designator);
 	sccp_line_release((sccp_line_t **)&channel->line);
 	/* */
 
