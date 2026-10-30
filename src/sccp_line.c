@@ -35,10 +35,11 @@ int __sccp_line_destroy(const void *ptr);
 void sccp_line_pre_reload(void)
 {
 	sccp_line_t *l = NULL;
-	SCCP_RWLIST_TRAVERSE_SAFE_BEGIN(&GLOB(lines), l, list) {
+	sccp_line_t * hotline = NULL;
+	SCCP_RWLIST_RDLOCK(&GLOB(lines));
+	SCCP_RWLIST_TRAVERSE(&GLOB(lines), l, list) {
 		if(GLOB(hotline)->line == l) { /* always remove hotline from ld */
-			sccp_log((DEBUGCAT_CONFIG + DEBUGCAT_LINE)) (VERBOSE_PREFIX_3 "%s: Removing Hotline from Device\n", l->name);
-			sccp_linedevice_remove(NULL, l);
+			hotline = sccp_line_retain(l);
 		} else { /* Don't want to include the hotline line */
 #ifdef CS_SCCP_REALTIME
 			if (l->realtime == FALSE)
@@ -50,7 +51,12 @@ void sccp_line_pre_reload(void)
 		}
 		l->pendingUpdate = 0;
 	}
-	SCCP_LIST_TRAVERSE_SAFE_END;
+	SCCP_RWLIST_UNLOCK(&GLOB(lines));
+	if (hotline) {
+		sccp_log((DEBUGCAT_CONFIG + DEBUGCAT_LINE)) (VERBOSE_PREFIX_3 "%s: Removing Hotline from Device\n", hotline->name);
+		sccp_linedevice_remove(NULL, hotline);
+		sccp_line_release(&hotline);
+	}
 }
 
 /*!
@@ -65,12 +71,21 @@ void sccp_line_pre_reload(void)
 void sccp_line_post_reload(void)
 {
 	sccp_line_t *line = NULL;
+	sccp_line_t ** lines = NULL;
+	uint32_t count = 0;
 
-	SCCP_RWLIST_TRAVERSE_SAFE_BEGIN(&GLOB(lines), line, list) {
-		if (!line->pendingDelete && !line->pendingUpdate) {
-			continue;
+	/* collect under the list lock, work outside of it: sccp_line_clean(l, TRUE) removes the line from GLOB(lines) */
+	SCCP_RWLIST_RDLOCK(&GLOB(lines));
+	if (SCCP_RWLIST_GETSIZE(&GLOB(lines)) > 0 && (lines = (sccp_line_t **)sccp_calloc(SCCP_RWLIST_GETSIZE(&GLOB(lines)), sizeof(sccp_line_t *)))) {
+		SCCP_RWLIST_TRAVERSE(&GLOB(lines), line, list) {
+			if (line->pendingDelete || line->pendingUpdate) {
+				lines[count++] = sccp_line_retain(line);
+			}
 		}
-		AUTO_RELEASE(sccp_line_t, l , sccp_line_retain(line));
+	}
+	SCCP_RWLIST_UNLOCK(&GLOB(lines));
+	for (uint32_t idx = 0; idx < count; idx++) {
+		AUTO_RELEASE(sccp_line_t, l , lines[idx]);
 
 		if (l) {
 			// existing lines
@@ -91,7 +106,9 @@ void sccp_line_post_reload(void)
 			sccp_log((DEBUGCAT_CONFIG + DEBUGCAT_LINE)) (VERBOSE_PREFIX_3 "%s: Line (line_post_reload) update:%d, delete:%d\n", l->name, l->pendingUpdate, l->pendingDelete);
 		}
 	}
-	SCCP_RWLIST_TRAVERSE_SAFE_END;
+	if (lines) {
+		sccp_free(lines);
+	}
 }
 
 /*!
@@ -224,16 +241,28 @@ void *sccp_create_hotline(void)
 void sccp_line_kill_channels(linePtr l)
 {
 	sccp_channel_t *c = NULL;
+	sccp_channel_t ** channels = NULL;
+	uint32_t count = 0;
 
 	if (!l) {
 		return;
 	}
+	/* take the channels off the list under the lock, hang them up outside of it: sccp_channel_endcall() ends up in the
+	 * asterisk hangup path, which takes the asterisk channel lock and comes back to l->channels (lock order inversion) */
 	SCCP_LIST_LOCK(&l->channels);
-	while ((c = SCCP_LIST_REMOVE_HEAD(&l->channels, list))) {
-		sccp_channel_endcall(c);
-		sccp_channel_release(&c);									// explicit release channel retain in list
+	if (SCCP_LIST_GETSIZE(&l->channels) > 0 && (channels = (sccp_channel_t **)sccp_calloc(SCCP_LIST_GETSIZE(&l->channels), sizeof(sccp_channel_t *)))) {
+		while ((c = SCCP_LIST_REMOVE_HEAD(&l->channels, list))) {
+			channels[count++] = c;									/* we now own the reference the list held */
+		}
 	}
 	SCCP_LIST_UNLOCK(&l->channels);
+	for (uint32_t idx = 0; idx < count; idx++) {
+		sccp_channel_endcall(channels[idx]);
+		sccp_channel_release(&channels[idx]);								// explicit release channel retain in list
+	}
+	if (channels) {
+		sccp_free(channels);
+	}
 }
 
 /*!

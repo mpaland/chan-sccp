@@ -249,6 +249,15 @@ struct parkinglot {
 #define sccp_parkinglot_unlock(x)	({pbx_mutex_unlock(&((sccp_parkinglot_t * const)(x))->lock);})				// discard const
 
 SCCP_RWLIST_HEAD(sccp_parkinglot_vector, sccp_parkinglot_t) parkinglots;
+/* lock order: parkinglots (list) first, then pl->lock */
+static void __attribute__((constructor)) sccp_parkinglots_init(void)
+{
+	SCCP_RWLIST_HEAD_INIT(&parkinglots);
+}
+static void __attribute__((destructor)) sccp_parkinglots_destroy(void)
+{
+	SCCP_RWLIST_HEAD_DESTROY(&parkinglots);
+}
 #define OBSERVER_CB_CMP(elem, value) ((elem).device == (value).device && (elem).instance == (value).instance)
 #define SLOT_CB_CMP(elem, value) ((elem).slot == (value))
 
@@ -281,18 +290,22 @@ static sccp_parkinglot_t * addParkinglot(const char *parkinglot)
 	return pl;
 }
 
+/* called with pl UNLOCKED; removes and destroys the parkinglot when it has no observers left */
 static int removeParkinglot(sccp_parkinglot_t *pl)
 {
-	pbx_assert(pl != NULL && pl != NULL);
+	pbx_assert(pl != NULL);
 
 	int res = FALSE;
 	sccp_parkinglot_t *removed = NULL;
 	sccp_log(DEBUGCAT_PARKINGLOT)(VERBOSE_PREFIX_1 "SCCP: (removeParkinglot) %s\n", pl->context);
 
 	SCCP_RWLIST_WRLOCK(&parkinglots);
-	removed = SCCP_RWLIST_REMOVE(&parkinglots, pl, list);
-	SCCP_RWLIST_UNLOCK(&parkinglots);
+	sccp_parkinglot_lock(pl);
+	if (SCCP_VECTOR_SIZE(&pl->observers) == 0) {							/* re-check under both locks */
+		removed = SCCP_RWLIST_REMOVE(&parkinglots, pl, list);
+	}
 	sccp_parkinglot_unlock(pl);
+	SCCP_RWLIST_UNLOCK(&parkinglots);
 
 	if (removed) {
 		if (removed->context) {
@@ -390,10 +403,10 @@ static int detachObserver(sccp_device_t * device, const sccp_buttonconfig_t * co
 			if (SCCP_VECTOR_REMOVE_CMP_UNORDERED(&pl->observers, cmp, OBSERVER_CB_CMP, SCCP_VECTOR_ELEM_CLEANUP_NOOP) == 0) {
 				res = TRUE;
 			}
-			if (SCCP_VECTOR_SIZE(&pl->observers) == 0) {
-				removeParkinglot(pl);	// will destroy pl and unlock pl in the process
-			} else {
-				sccp_parkinglot_unlock(pl);
+			boolean_t unused = (SCCP_VECTOR_SIZE(&pl->observers) == 0);
+			sccp_parkinglot_unlock(pl);
+			if (unused) {
+				removeParkinglot(pl);	/* takes the list lock first, then pl->lock (canonical order) and destroys pl when still unused */
 			}
 		}
 	}

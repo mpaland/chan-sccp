@@ -460,12 +460,22 @@ boolean_t sccp_device_check_update(devicePtr device)
 void sccp_device_post_reload(void)
 {
 	sccp_device_t *d = NULL;
+	sccp_device_t ** devices = NULL;
+	uint32_t count = 0;
 	sccp_log((DEBUGCAT_CONFIG)) (VERBOSE_PREFIX_1 "SCCP: (post_reload)\n");
 
-	SCCP_RWLIST_TRAVERSE_SAFE_BEGIN(&GLOB(devices), d, list) {
-		if (!d->pendingDelete && !d->pendingUpdate) {
-			continue;
+	/* collect under the list lock, work outside of it: check_update may clean a device and remove it from GLOB(devices) */
+	SCCP_RWLIST_RDLOCK(&GLOB(devices));
+	if (SCCP_RWLIST_GETSIZE(&GLOB(devices)) > 0 && (devices = (sccp_device_t **)sccp_calloc(SCCP_RWLIST_GETSIZE(&GLOB(devices)), sizeof(sccp_device_t *)))) {
+		SCCP_RWLIST_TRAVERSE(&GLOB(devices), d, list) {
+			if (d->pendingDelete || d->pendingUpdate) {
+				devices[count++] = sccp_device_retain(d);
+			}
 		}
+	}
+	SCCP_RWLIST_UNLOCK(&GLOB(devices));
+	for (uint32_t idx = 0; idx < count; idx++) {
+		d = devices[idx];
 		/* Because of the previous check, the only reason that the device hasn't
 		 * been updated will be because it is currently engaged in a call.
 		 */
@@ -476,8 +486,11 @@ void sccp_device_post_reload(void)
 		sccp_codec_reduceSet(d->preferences.audio , d->capabilities.audio);
 		sccp_codec_reduceSet(d->preferences.video , d->capabilities.video);
 		/* should we re-check the device after hangup ? */
+		sccp_device_release(&devices[idx]);
 	}
-	SCCP_LIST_TRAVERSE_SAFE_END;
+	if (devices) {
+		sccp_free(devices);
+	}
 }
 
 /* ====================================================================================================== start getters / setters for privateData */
@@ -2390,42 +2403,82 @@ void _sccp_dev_clean(devicePtr device, boolean_t remove_from_global, boolean_t r
 		if (d->currentLine) {
 			sccp_dev_setActiveLine(d, NULL);
 		}
-		/* hang up open channels and remove device from line */
-		SCCP_LIST_LOCK(&d->buttonconfig);
-		SCCP_LIST_TRAVERSE(&d->buttonconfig, config, list) {
-			if (config->type == LINE) {
-				sccp_log((DEBUGCAT_DEVICE)) (VERBOSE_PREFIX_2 "%s: checking buttonconfig index:%d, type:%s (%d) to see if there are any connected lines/channels\n",
-					d->id, config->index, sccp_config_buttontype2str(config->type), config->type);
-				AUTO_RELEASE(sccp_line_t, line , sccp_line_find_byname(config->button.line.name, FALSE));
-
-				if (!line) {
-					continue;
+		/* hang up open channels and remove device from line.
+		 * Phase 1 collects the lines and parkinglot buttons under the buttonconfig lock; everything that calls out
+		 * (hangups, linedevice removal with events and dialplan changes, parkinglot observers) runs without it, so
+		 * the buttonconfig lock is never held while taking line, channel, asterisk or parkinglot locks. */
+		{
+			sccp_line_t ** lines = NULL;
+			sccp_buttonconfig_t ** parkinglots = NULL;
+			uint32_t numlines = 0;
+			uint32_t numparkinglots = 0;
+			SCCP_LIST_LOCK(&d->buttonconfig);
+			uint32_t numbuttons = SCCP_LIST_GETSIZE(&d->buttonconfig);
+			if (numbuttons > 0) {
+				lines = (sccp_line_t **)sccp_calloc(numbuttons, sizeof(sccp_line_t *));
+				parkinglots = (sccp_buttonconfig_t **)sccp_calloc(numbuttons, sizeof(sccp_buttonconfig_t *));
+			}
+			if (lines && parkinglots) {
+				SCCP_LIST_TRAVERSE(&d->buttonconfig, config, list) {
+					if (config->type == LINE) {
+						sccp_log((DEBUGCAT_DEVICE)) (VERBOSE_PREFIX_2 "%s: checking buttonconfig index:%d, type:%s (%d) to see if there are any connected lines/channels\n",
+							d->id, config->index, sccp_config_buttontype2str(config->type), config->type);
+						sccp_line_t * line = sccp_line_find_byname(config->button.line.name, FALSE);
+						if (line) {
+							lines[numlines++] = line;
+						}
+#ifdef CS_SCCP_PARK
+					} else if (iParkingLot.detachObserver && config->type == FEATURE && config->button.feature.id == SCCP_FEATURE_PARKINGLOT) {
+						parkinglots[numparkinglots++] = config;
+#endif
+					}
 				}
+			}
+			SCCP_LIST_UNLOCK(&d->buttonconfig);
+
+			for (uint32_t idx = 0; idx < numlines; idx++) {
+				sccp_line_t * line = lines[idx];
+				sccp_channel_t ** channels = NULL;
+				uint32_t numchannels = 0;
 				SCCP_LIST_LOCK(&line->channels);
-				SCCP_LIST_TRAVERSE_BACKWARDS_SAFE_BEGIN(&line->channels, c, list) {
-					AUTO_RELEASE(sccp_channel_t, channel, sccp_channel_retain(c));
-					if (channel) {
-						AUTO_RELEASE(sccp_device_t, tmpDevice, sccp_channel_getDevice(channel));
+				if (SCCP_LIST_GETSIZE(&line->channels) > 0 && (channels = (sccp_channel_t **)sccp_calloc(SCCP_LIST_GETSIZE(&line->channels), sizeof(sccp_channel_t *)))) {
+					SCCP_LIST_TRAVERSE_BACKWARDS(&line->channels, c, list) {
+						AUTO_RELEASE(sccp_device_t, tmpDevice, sccp_channel_getDevice(c));
 						if (tmpDevice && tmpDevice == d) {
-							pbx_log(LOG_WARNING, "SCCP: Hangup open channel on line %s device %s\n", line->name, d->id);
-							sccp_channel_endcall(channel);
+							channels[numchannels++] = sccp_channel_retain(c);
 						}
 					}
 				}
-				SCCP_LIST_TRAVERSE_BACKWARDS_SAFE_END;
 				SCCP_LIST_UNLOCK(&line->channels);
+				for (uint32_t cidx = 0; cidx < numchannels; cidx++) {
+					pbx_log(LOG_WARNING, "SCCP: Hangup open channel on line %s device %s\n", line->name, d->id);
+					sccp_channel_endcall(channels[cidx]);
+					sccp_channel_release(&channels[cidx]);
+				}
+				if (channels) {
+					sccp_free(channels);
+				}
 
 				/* remove devices from line */
 				sccp_log((DEBUGCAT_CORE + DEBUGCAT_DEVICE)) (VERBOSE_PREFIX_2 "SCCP: Remove Line %s from device %s\n", line->name, d->id);
 				sccp_linedevice_remove(d, line);
+				sccp_line_release(&lines[idx]);
+			}
 #ifdef CS_SCCP_PARK
-			} else if (iParkingLot.detachObserver && config->type == FEATURE && config->button.feature.id ==SCCP_FEATURE_PARKINGLOT) {
-				sccp_log((DEBUGCAT_DEVICE))(VERBOSE_PREFIX_2 "%s: checking buttonconfig index:%d, type:%s (%d) to see if there are any observed parkinglots\n", d->id, config->index,
-							    sccp_config_buttontype2str(config->type), config->type);
-				iParkingLot.detachObserver(d, config);
+			for (uint32_t idx = 0; idx < numparkinglots; idx++) {
+				sccp_log((DEBUGCAT_DEVICE))(VERBOSE_PREFIX_2 "%s: checking buttonconfig index:%d, type:%s (%d) to see if there are any observed parkinglots\n", d->id, parkinglots[idx]->index,
+							    sccp_config_buttontype2str(parkinglots[idx]->type), parkinglots[idx]->type);
+				iParkingLot.detachObserver(d, parkinglots[idx]);
+			}
 #endif
+			if (lines) {
+				sccp_free(lines);
+			}
+			if (parkinglots) {
+				sccp_free(parkinglots);
 			}
 		}
+		SCCP_LIST_LOCK(&d->buttonconfig);
 		SCCP_LIST_TRAVERSE_SAFE_BEGIN(&d->buttonconfig, config, list) {
 			sccp_log_and((DEBUGCAT_DEVICE + DEBUGCAT_HIGH)) (VERBOSE_PREFIX_2 "%s: checking buttonconfig for pendingDelete (index:%d, type:%s (%d), pendingDelete:%s, pendingUpdate:%s)\n",
 				d->id, config->index, sccp_config_buttontype2str(config->type), config->type, config->pendingDelete ? "True" : "False", config->pendingUpdate ? "True" : "False");

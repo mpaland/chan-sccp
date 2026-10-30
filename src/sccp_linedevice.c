@@ -266,38 +266,54 @@ void sccp_linedevice_create(constDevicePtr d, constLinePtr l, uint8_t lineInstan
 void sccp_linedevice_remove(constDevicePtr d, linePtr l)
 {
 	sccp_linedevice_t * ld = NULL;
+	sccp_linedevice_t ** removed = NULL;
+	uint32_t count = 0;
 
 	if(!l) {
 		return;
 	}
 	sccp_log_and((DEBUGCAT_HIGH + DEBUGCAT_LINE))(VERBOSE_PREFIX_3 "%s: remove device from line %s\n", DEV_ID_LOG(d), l->name);
 
+	/* unlink under the lock; the dialplan update, the events and the realtime cleanup run outside of it */
 	SCCP_LIST_LOCK(&l->devices);
-	SCCP_LIST_TRAVERSE_SAFE_BEGIN(&l->devices, ld, list) {
-		if(d == NULL || ld->device == d) {
+	if (SCCP_LIST_GETSIZE(&l->devices) > 0 && (removed = (sccp_linedevice_t **)sccp_calloc(SCCP_LIST_GETSIZE(&l->devices), sizeof(sccp_linedevice_t *)))) {
+		SCCP_LIST_TRAVERSE_SAFE_BEGIN(&l->devices, ld, list) {
+			if(d == NULL || ld->device == d) {
 #if CS_REFCOUNT_DEBUG
-			sccp_refcount_removeRelationship(d ? d : ld->device, l);
+				sccp_refcount_removeRelationship(d ? d : ld->device, l);
 #endif
-			regcontext_exten(ld, 0);
-			SCCP_LIST_REMOVE_CURRENT(list);
-			l->statistic.numberOfActiveDevices--;
-			sccp_event_t * event = sccp_event_allocate(SCCP_EVENT_DEVICE_DETACHED);
-			if(event) {
-				event->deviceAttached.ld = sccp_linedevice_retain(ld);
-				sccp_event_fire(event);
+				SCCP_LIST_REMOVE_CURRENT(list);
+				l->statistic.numberOfActiveDevices--;
+				removed[count++] = ld;									/* we own the reference the list held */
+				if(d) {
+					break /*early*/;
+				}
 			}
-			sccp_linedevice_release(&ld); /* explicit release of list retained ld */
-#ifdef CS_SCCP_REALTIME
-			if(l->realtime && SCCP_LIST_GETSIZE(&l->devices) == 0 && SCCP_LIST_GETSIZE(&l->channels) == 0) {
-				sccp_line_clean(l, TRUE);
-			}
-#endif
-			if(d)
-				break /*early*/;
 		}
+		SCCP_LIST_TRAVERSE_SAFE_END;
 	}
-	SCCP_LIST_TRAVERSE_SAFE_END;
+	boolean_t line_is_unused = (SCCP_LIST_GETSIZE(&l->devices) == 0 && SCCP_LIST_GETSIZE(&l->channels) == 0);
 	SCCP_LIST_UNLOCK(&l->devices);
+
+	for (uint32_t idx = 0; idx < count; idx++) {
+		ld = removed[idx];
+		regcontext_exten(ld, 0);
+		sccp_event_t * event = sccp_event_allocate(SCCP_EVENT_DEVICE_DETACHED);
+		if(event) {
+			event->deviceAttached.ld = sccp_linedevice_retain(ld);
+			sccp_event_fire(event);
+		}
+		sccp_linedevice_release(&removed[idx]); /* explicit release of list retained ld */
+	}
+	if (removed) {
+		sccp_free(removed);
+	}
+#ifdef CS_SCCP_REALTIME
+	if(count && l->realtime && line_is_unused) {
+		sccp_line_clean(l, TRUE);
+		return;												/* the line may be gone now */
+	}
+#endif
 
 	if(GLOB(module_running) == TRUE && d) {
 		sccp_line_updatePreferencesFromDevicesToLine(l);

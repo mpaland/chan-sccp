@@ -565,20 +565,28 @@ void sccp_session_terminateAll()
  * \brief Release device pointer from session
  * \param session SCCP Session
  */
+/*!
+ * \brief Detach the device from the session.
+ * Only the pointer swap happens under the session lock; the registration state change (events, hints) is done
+ * afterwards, so the session lock is never held while other locks are taken (canonical order: GLOB(sessions), then
+ * the session lock, as used by "sccp show sessions").
+ * \returns the previously attached device (retained), to be released by the caller
+ */
 static sccp_device_t *__sccp_session_removeDevice(sessionPtr session)
 {
 	sccp_device_t *return_device = NULL;
 
-	if (session && (return_device = session->device)) {
-		if (return_device->session && return_device->session != session) {
-			sccp_session_removeFromGlobals(return_device->session);
-		}
-		sccp_device_setRegistrationState(return_device, SKINNY_DEVICE_RS_NONE);
+	if (!session) {
+		return NULL;
 	}
 	sccp_session_lock(session);
-	sccp_copy_string(session->designator, sccp_netsock_stringify(&session->ourip), sizeof(session->designator));
+	return_device = session->device;
 	session->device = NULL;
+	sccp_copy_string(session->designator, sccp_netsock_stringify(&session->ourip), sizeof(session->designator));
 	sccp_session_unlock(session);
+	if (return_device) {
+		sccp_device_setRegistrationState(return_device, SKINNY_DEVICE_RS_NONE);
+	}
 	return return_device;
 }
 
@@ -591,27 +599,25 @@ static sccp_device_t *__sccp_session_removeDevice(sessionPtr session)
 static int __sccp_session_addDevice(sessionPtr session, constDevicePtr device)
 {
 	int res = 0;
-	sccp_device_t *new_device = NULL;
 	if (session && (!device || (device && session->device != device))) {
-		sccp_session_lock(session);
-		new_device = sccp_device_retain(device);				/* do this before releasing anything, to prevent device cleanup if the same */
+		sccp_device_t *new_device = sccp_device_retain(device);				/* do this before releasing anything, to prevent device cleanup if the same */
 		if (session->device) {
 			AUTO_RELEASE(sccp_device_t, remDevice, __sccp_session_removeDevice(session)); /* implicit release */
 		}
 		if (device) {
 			if (new_device) {
+				sccp_session_lock(session);
 				session->device = new_device;				/* keep newly retained device */
-				sccp_device_setSession(session->device, session);	/* the device holds a reference to its session */
-
 				char buf[16] = "";
 				snprintf(buf, 16, "%s:%d", device->id, session->sc.fd);
 				sccp_copy_string(session->designator, buf, sizeof(session->designator));
+				sccp_session_unlock(session);
+				sccp_device_setSession(new_device, session);			/* the device holds a reference to its session */
 				res = 1;
 			} else {
 				res = -1;
 			}
 		}
-		sccp_session_unlock(session);
 	}
 	return res;
 }

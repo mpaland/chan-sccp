@@ -236,16 +236,32 @@ int sccp_preUnload(void)
 
 	sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_2 "SCCP: Hangup open channels\n");				//! \todo make this pbx independend
 
-	/* removing devices */
+	/* removing devices: collect them under the list lock, clean them outside of it (dev_clean removes them from the list) */
 	sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_3 "SCCP: Removing Devices\n");
-	SCCP_RWLIST_TRAVERSE_SAFE_BEGIN(&GLOB(devices), d, list) {
-		sccp_log((DEBUGCAT_CORE + DEBUGCAT_DEVICE)) (VERBOSE_PREFIX_3 "SCCP: Removing device %s\n", d->id);
-		d->realtime = TRUE;										// use realtime, to fully clear the device configuration
-		sccp_dev_clean_restart(d, TRUE);								// performs a device reset if it has a session
+	{
+		sccp_device_t ** devices = NULL;
+		uint32_t count = 0;
+		SCCP_RWLIST_RDLOCK(&GLOB(devices));
+		if (SCCP_RWLIST_GETSIZE(&GLOB(devices)) > 0 && (devices = (sccp_device_t **)sccp_calloc(SCCP_RWLIST_GETSIZE(&GLOB(devices)), sizeof(sccp_device_t *)))) {
+			SCCP_RWLIST_TRAVERSE(&GLOB(devices), d, list) {
+				devices[count++] = sccp_device_retain(d);
+			}
+		}
+		SCCP_RWLIST_UNLOCK(&GLOB(devices));
+		for (uint32_t idx = 0; idx < count; idx++) {
+			sccp_log((DEBUGCAT_CORE + DEBUGCAT_DEVICE)) (VERBOSE_PREFIX_3 "SCCP: Removing device %s\n", devices[idx]->id);
+			devices[idx]->realtime = TRUE;								// use realtime, to fully clear the device configuration
+			sccp_dev_clean_restart(devices[idx], TRUE);						// performs a device reset if it has a session
+			sccp_device_release(&devices[idx]);
+		}
+		if (devices) {
+			sccp_free(devices);
+		}
 	}
-	SCCP_RWLIST_TRAVERSE_SAFE_END;
 	if (SCCP_RWLIST_EMPTY(&GLOB(devices))) {
 		SCCP_RWLIST_HEAD_DESTROY(&GLOB(devices));
+	} else {
+		pbx_log(LOG_WARNING, "SCCP: %d device(s) left in GLOB(devices) after cleanup\n", SCCP_RWLIST_GETSIZE(&GLOB(devices)));
 	}
 
 	/* hotline will be removed by line removing function */
@@ -261,14 +277,30 @@ int sccp_preUnload(void)
 		sccp_free(GLOB(hotline));
 	}
 
-	/* removing lines */
-	SCCP_RWLIST_TRAVERSE_SAFE_BEGIN(&GLOB(lines), l, list) {
-		sccp_log((DEBUGCAT_CORE + DEBUGCAT_LINE)) (VERBOSE_PREFIX_4 "SCCP: Removing line %s\n", l->name);
-		sccp_line_clean(l, TRUE);
+	/* removing lines: same pattern, sccp_line_clean(l, TRUE) removes the line from GLOB(lines) */
+	{
+		sccp_line_t ** lines = NULL;
+		uint32_t count = 0;
+		SCCP_RWLIST_RDLOCK(&GLOB(lines));
+		if (SCCP_RWLIST_GETSIZE(&GLOB(lines)) > 0 && (lines = (sccp_line_t **)sccp_calloc(SCCP_RWLIST_GETSIZE(&GLOB(lines)), sizeof(sccp_line_t *)))) {
+			SCCP_RWLIST_TRAVERSE(&GLOB(lines), l, list) {
+				lines[count++] = sccp_line_retain(l);
+			}
+		}
+		SCCP_RWLIST_UNLOCK(&GLOB(lines));
+		for (uint32_t idx = 0; idx < count; idx++) {
+			sccp_log((DEBUGCAT_CORE + DEBUGCAT_LINE)) (VERBOSE_PREFIX_4 "SCCP: Removing line %s\n", lines[idx]->name);
+			sccp_line_clean(lines[idx], TRUE);
+			sccp_line_release(&lines[idx]);
+		}
+		if (lines) {
+			sccp_free(lines);
+		}
 	}
-	SCCP_RWLIST_TRAVERSE_SAFE_END;
 	if (SCCP_RWLIST_EMPTY(&GLOB(lines))) {
 		SCCP_RWLIST_HEAD_DESTROY(&GLOB(lines));
+	} else {
+		pbx_log(LOG_WARNING, "SCCP: %d line(s) left in GLOB(lines) after cleanup\n", SCCP_RWLIST_GETSIZE(&GLOB(lines)));
 	}
 	/* stop services: sessions first (their teardown still fires events through the threadpool), then drain and destroy
 	 * the threadpool, and only then take the event system away */
