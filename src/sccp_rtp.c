@@ -97,6 +97,26 @@
 SCCP_FILE_VERSION(__FILE__, "");
 
 /*!
+ * \brief initialise the embedded rtp structure of a channel (lock, type, hole punch state)
+ */
+void sccp_rtp_init(rtpPtr rtp, sccp_rtp_type_t type)
+{
+	pbx_assert(rtp != NULL);
+	pbx_mutex_init(&rtp->lock);
+	rtp->type       = type;
+	rtp->_holepunch = SCCP_RTP_HOLEPUNCH_NONE;
+}
+
+/*!
+ * \brief counterpart of sccp_rtp_init, called from the channel destructor after the last use of the rtp structure
+ */
+void sccp_rtp_deinit(rtpPtr rtp)
+{
+	pbx_assert(rtp != NULL);
+	pbx_mutex_destroy(&rtp->lock);
+}
+
+/*!
  * \brief create a new rtp server
  * \todo refactor iPbx.rtp_???_server to include sccp_rtp_type_t
  */
@@ -172,6 +192,7 @@ int sccp_rtp_requestRTPPorts(constDevicePtr device, channelPtr channel)
 	pbx_assert(device != NULL && channel != NULL);
 
 	sccp_log(DEBUGCAT_RTP)(VERBOSE_PREFIX_3 "%s: (requestRTPPort) request rtp port from phone\n", device->id);
+	sccp_rtp_resetHolePunch(&channel->rtp.audio);										/* new port lifetime starts */
 	device->protocol->sendPortRequest(device, channel, SKINNY_MEDIA_TRANSPORT_TYPE_RTP, SKINNY_MEDIA_TYPE_AUDIO);
 
 #ifdef CS_SCCP_VIDEO
@@ -228,6 +249,7 @@ void sccp_rtp_destroy(constChannelPtr c)
 		}
 		iPbx.rtp_destroy(audio->instance);
 		audio->instance = NULL;
+		sccp_rtp_resetHolePunch(audio);											/* our side of the path is gone as well */
 	}
 
 	if (video->instance) {
@@ -279,6 +301,36 @@ void sccp_rtp_setCallback(rtpPtr rtp, sccp_rtp_dir_t dir, scpp_rtp_direction_cb_
 	SCOPED_MUTEX(rtplock, (ast_mutex_t *)&rtp->lock);
 	sccp_rtp_direction_t * direction = (dir == SCCP_RTP_RECEPTION) ? &rtp->reception : &rtp->transmission;
 	direction->cb                    = cb;
+}
+
+sccp_rtp_holepunch_t sccp_rtp_getHolePunch(constRtpPtr rtp)
+{
+	SCOPED_MUTEX(rtplock, (ast_mutex_t *)&rtp->lock);
+	return rtp->_holepunch;
+}
+
+/*!
+ * \brief atomically move the hole punch state from \a from to \a to
+ * \retval TRUE the state was \a from and is now \a to
+ * \retval FALSE the state was something else, nothing changed
+ */
+boolean_t sccp_rtp_transitionHolePunch(rtpPtr rtp, sccp_rtp_holepunch_t from, sccp_rtp_holepunch_t to)
+{
+	SCOPED_MUTEX(rtplock, (ast_mutex_t *)&rtp->lock);
+	if (rtp->_holepunch != from) {
+		return FALSE;
+	}
+	rtp->_holepunch = to;
+	return TRUE;
+}
+
+/*!
+ * \brief the phone's rtp port lifetime ended, a new punch is allowed again
+ */
+void sccp_rtp_resetHolePunch(rtpPtr rtp)
+{
+	SCOPED_MUTEX(rtplock, (ast_mutex_t *)&rtp->lock);
+	rtp->_holepunch = SCCP_RTP_HOLEPUNCH_NONE;
 }
 
 /* Note: this does unset callback in the process */

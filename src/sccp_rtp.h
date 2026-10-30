@@ -24,13 +24,27 @@ typedef struct sccp_rtp_direction {
 } sccp_rtp_direction_t;
 
 /*!
+ * \brief NAT hole punch state of one rtp stream
+ *
+ * The punch is a one-shot action per lifetime of the phone's rtp port: it is started at most once (NONE -> ACTIVE) while the
+ * call is in progress, completed by the first inbound packet or by the call connecting (ACTIVE -> DONE), and reset to NONE only
+ * when the port lifetime ends (receive channel closed without keeping the port, ports re-requested, rtp instance destroyed).
+ */
+typedef enum {
+	SCCP_RTP_HOLEPUNCH_NONE = 0,										/*!< not punched for the current port lifetime */
+	SCCP_RTP_HOLEPUNCH_ACTIVE,										/*!< burst started, waiting for the first inbound packet */
+	SCCP_RTP_HOLEPUNCH_DONE,										/*!< punched, do not punch again for this port lifetime */
+} sccp_rtp_holepunch_t;
+
+/*!
  * \brief SCCP RTP Structure
  */
 struct sccp_rtp {
-	sccp_mutex_t lock;
+	sccp_mutex_t lock;											/*!< protects the _state fields, callbacks and _holepunch; initialised by sccp_rtp_init */
 	PBX_RTP_TYPE *instance;											/*!< pbx rtp instance pointer */
 	boolean_t instance_active;
 	sccp_rtp_type_t type;											/* audio/video/data */
+	sccp_rtp_holepunch_t _holepunch;									/*!< NAT hole punch state, access via sccp_rtp_*HolePunch */
 	sccp_rtp_direction_t reception;										/* receive rtp / ORC */
 	sccp_rtp_direction_t transmission;									/* transmit rtp / SMT */
 	struct sockaddr_storage phone;										/*!< our phone information (openreceive) */
@@ -39,6 +53,8 @@ struct sccp_rtp {
  	boolean_t directMedia;											/*!< Show if we are running in directmedia mode (set in pbx_impl during rtp bridging) */
 };														/*!< SCCP RTP Structure */
 
+SCCP_API void SCCP_CALL sccp_rtp_init(rtpPtr rtp, sccp_rtp_type_t type);
+SCCP_API void SCCP_CALL sccp_rtp_deinit(rtpPtr rtp);
 SCCP_API boolean_t SCCP_CALL sccp_rtp_createServer(constDevicePtr d, channelPtr c, sccp_rtp_type_t type);
 SCCP_API int SCCP_CALL sccp_rtp_requestRTPPorts(constDevicePtr device, channelPtr channel);
 SCCP_API void SCCP_CALL sccp_rtp_stop(constChannelPtr channel);
@@ -62,6 +78,9 @@ SCCP_API void SCCP_CALL sccp_rtp_subtractState(rtpPtr rtp, sccp_rtp_dir_t dir, s
 SCCP_API void SCCP_CALL sccp_rtp_setState(rtpPtr rtp, sccp_rtp_dir_t dir, sccp_rtp_status_t newstate);
 SCCP_API void SCCP_CALL sccp_rtp_setCallback(rtpPtr rtp, sccp_rtp_dir_t dir, scpp_rtp_direction_cb_t cb);
 SCCP_API boolean_t SCCP_CALL sccp_rtp_runCallback(rtpPtr rtp, sccp_rtp_dir_t dir, constChannelPtr c);
+SCCP_API sccp_rtp_holepunch_t SCCP_CALL sccp_rtp_getHolePunch(constRtpPtr rtp);
+SCCP_API boolean_t SCCP_CALL sccp_rtp_transitionHolePunch(rtpPtr rtp, sccp_rtp_holepunch_t from, sccp_rtp_holepunch_t to);
+SCCP_API void SCCP_CALL sccp_rtp_resetHolePunch(rtpPtr rtp);
 
 SCCP_API uint8_t SCCP_CALL sccp_rtp_get_payloadType(constRtpPtr rtp, skinny_codec_t codec);
 SCCP_API boolean_t SCCP_CALL sccp_rtp_getUs(constRtpPtr rtp, struct sockaddr_storage * us);

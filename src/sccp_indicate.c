@@ -272,27 +272,12 @@ void __sccp_indicate (constDevicePtr maybe_device, channelPtr c, const sccp_chan
 		case SCCP_CHANNELSTATE_CONNECTED:
 			{
 				d->indicate->connected(d, lineInstance, c->callid, c->calltype, ci);
-				// Abort the holepunch if the channel gets connected while it is still active.
-				// This sometimes happens on very fast answer of a call immediately after progress.
-				// \todo Check if devices have trouble with fast closing of media transmission and re-opening it, or twice starting
-				//       media transmission. Discuss the semantics of the holepunch. How often do we need to do this, when can the
-				//       RTP ports change? It could be a more appropriate time to mark the hole as non-punched as soon as the lifetime
-				//       of RTP port validity changes and instead consider the hole-punch a one-time action while they are still valid.
-
-				// Opening the media transmission is not necessary if a hole punch has been started. Otherwise we would double open it.
-				// \todo Do we need to lock the channel here to make sure packet handling from pbx_impl does not break things here,
-				//       or is locking done there already iirc?
-				if(!sccp_channel_holePunchPending(c))
+				/* A NAT hole punch that is still active when the call connects (fast answer right after progress) is completed
+				 * here while leaving the media transmission open; the reception callback would otherwise start it a second time. */
+				if(sccp_channel_holePunchPending(c)) {
+					sccp_channel_finishHolePunch(c, TRUE);
+				} else {
 					sccp_rtp_setCallback(&c->rtp.audio, SCCP_RTP_RECEPTION, sccp_channel_startMediaTransmission);
-
-				if(c->calltype != SKINNY_CALLTYPE_INBOUND) {
-					if(d->nat >= SCCP_NAT_ON) {
-						// Since the channel is already connected, we can leave the audio open and don't need to close the sending side.
-						// This is also necessary to avoid that some of the phones (notably 79x1, 89xx) also close the receiving audio.
-						// \todo Check if this condition needs to be handled by two cases in the pbx_impl code for incoming packets.
-						//       Or is this already handled by assuming the channel will be up and thus hole punching won't be handled any more?
-						sccp_channel_finishHolePunch(c, true);
-					}
 				}
 				if(!sccp_rtp_getState(&c->rtp.audio, SCCP_RTP_RECEPTION)) {
 					sccp_channel_openReceiveChannel(c);

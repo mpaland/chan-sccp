@@ -64,7 +64,6 @@ struct sccp_private_channel_data {
 		skinny_tone_t active;
 		skinny_toneDirection_t direction;
 	} tone;
-	boolean_t firewall_holepunch;
 };
 
 /*!
@@ -148,14 +147,9 @@ static void makeProgress(channelPtr c)
 	if(c->wantsEarlyRTP() && c->progressSent == sccp_always_false) {
 		sccp_log(DEBUGCAT_RTP)(VERBOSE_PREFIX_3 "%s: (%s)\n", c->designator, __func__);
 		if(!sccp_rtp_getState(&c->rtp.audio, SCCP_RTP_RECEPTION)) {
-			// This should be the only place where the issueing of a holepunch is necessary in case of NAT, since signalling of progress
-			// is the only case when inband audio is received without also sending outbound audio in an outgoing call.
-			// \todo Verify that no cases are missing here like inband tones.
-			// In that case, opening of the receive channel for audio/video should be postponed to the arrival
-			// of the first packet from the phone in the pbx, so finishHolePunch should call the openReceiveChannel upon being called.
-			// This way we can make sure that the channels are only opened exactly one time when the situation of progress during NAT occurs
-			// on an outgoing call.
-
+			/* Progress on an outgoing call is the one situation where inbound audio is expected without outbound audio being
+			 * sent. Behind NAT the phone's port is only reachable after it has sent something itself, so the receive channel is
+			 * opened by way of a hole punch (see sccp_channel_startHolePunch) instead of directly. */
 			AUTO_RELEASE(sccp_device_t, d, sccp_channel_getDevice(c));
 			if(!d) {
 				pbx_log(LOG_ERROR, "%s: (%s) Could not retrieve device from channel\n", c->designator, __func__);
@@ -239,6 +233,8 @@ channelPtr sccp_channel_allocate(constLinePtr l, constDevicePtr device)
 			break;
 		}
 		pbx_mutex_init(&channel->lock);
+		sccp_rtp_init(&channel->rtp.audio, SCCP_RTP_AUDIO);
+		sccp_rtp_init(&channel->rtp.video, SCCP_RTP_VIDEO);
 #if CS_REFCOUNT_DEBUG
 		sccp_refcount_addRelationship(refLine, channel);
 #endif
@@ -768,82 +764,77 @@ void sccp_channel_StatisticsRequest(constChannelPtr channel)
 
 
 
-/*
- * \brief returns true if a hole punch process has been started but not finished yet. necessary to decide behaviour in call logic to avoid double channel opening.
+/*!
+ * \brief is a NAT hole punch started but not completed yet
+ *
+ * Used by the call logic to avoid opening the media transmission a second time while the punch burst is still running.
  */
 boolean_t sccp_channel_holePunchPending(constChannelPtr c)
 {
-	pbx_assert(c != NULL && c->privateData);
-	return c->privateData->firewall_holepunch;
+	pbx_assert(c != NULL);
+	return sccp_rtp_getHolePunch(&c->rtp.audio) == SCCP_RTP_HOLEPUNCH_ACTIVE;
 }
 
-/*
- * \brief a simple way to punch a whole in the firewall by sending a short burst of packets during progress
- * transmission will be stopped again as soon as the first packet has been received from the device in astwrap_rtp_read
+/*!
+ * \brief punch a hole through a NAT firewall by letting the phone send a short burst of audio during progress
+ *
+ * The phone is told to open its receive channel and to start transmitting towards us. The transmission is stopped again by
+ * sccp_channel_finishHolePunch() as soon as the first packet arrives (sccp_astwrap_rtp_read) or the call connects.
+ * The punch is a one-shot action per rtp port lifetime (sccp_rtp_holepunch_t): calling this again while the state is
+ * ACTIVE or DONE only makes sure the receive channel is open.
  */
 void sccp_channel_startHolePunch(constChannelPtr c)
 {
-	pbx_assert(c != NULL && c->privateData && !c->privateData->firewall_holepunch);
+	pbx_assert(c != NULL);
+	sccp_rtp_t * audio = (sccp_rtp_t *)&(c->rtp.audio);
 
 	AUTO_RELEASE(sccp_device_t, d, sccp_channel_getDevice(c));
 	if(!d) {
 		pbx_log(LOG_ERROR, "%s: (%s) Could not retrieve device from channel\n", c->designator, __func__);
 		return;
 	}
-	//sccp_rtp_t * audio = (sccp_rtp_t *)&(c->rtp.audio);
-	/*! \todo
-		// punching is only necessary if the rtp-instance ip-address+mask differs from the rtp->phone+mask
-		// ie: they are in different networks and there is a potential firewall in between
-		sccp_rtp_t * audio = (sccp_rtp_t *)&(c->rtp.audio);
-		apply_netmask()
-		if (sccp_netsock_cmp_addr(&audio->phone, &audio->phone_remote)) {
-	*/
-	// No checks necessary here, since everything gets called exactly in one place, and that is when one-way-audio is requested in progress.
-	//if(!sccp_rtp_getState(audio, SCCP_RTP_TRANSMISSION) && pbx_channel_state(c->owner) != AST_STATE_UP && c->wantsEarlyRTP()) {
-		sccp_log(DEBUGCAT_RTP)(VERBOSE_PREFIX_3 "%s: (%s) start Punching a hole through the firewall\n", c->designator, __func__);
-		c->privateData->firewall_holepunch = TRUE;
-//		sccp_rtp_requestRTPPorts((constDevicePtr)d, (channelPtr)c);
-	/* start audio rtp server if not already present */
-		if (!c->rtp.audio.instance && !sccp_rtp_createServer(d, (channelPtr)c, SCCP_RTP_AUDIO)) {
-			pbx_log(LOG_WARNING, "%s: Error opening RTP instance for channel %s\n", d->id, c->designator);
+	if(!sccp_rtp_transitionHolePunch(audio, SCCP_RTP_HOLEPUNCH_NONE, SCCP_RTP_HOLEPUNCH_ACTIVE)) {
+		sccp_log(DEBUGCAT_RTP)(VERBOSE_PREFIX_3 "%s: (%s) hole already punched for this rtp port, only opening the receive channel\n", c->designator, __func__);
+		if(!sccp_rtp_getState(audio, SCCP_RTP_RECEPTION)) {
+			sccp_channel_openReceiveChannel(c);
 		}
-		sccp_channel_openReceiveChannel(c);
-		sccp_channel_startMediaTransmission(c);
-	//}
+		return;
+	}
+	sccp_log(DEBUGCAT_RTP)(VERBOSE_PREFIX_3 "%s: (%s) start punching a hole through the firewall\n", c->designator, __func__);
+	if(!audio->instance && !sccp_rtp_createServer(d, (channelPtr)c, SCCP_RTP_AUDIO)) {
+		pbx_log(LOG_WARNING, "%s: Error opening RTP instance for channel %s\n", d->id, c->designator);
+	}
+	sccp_channel_openReceiveChannel(c);
+	sccp_channel_startMediaTransmission(c);
 }
 
-// When the keepChannelOpen parameter is true, then we don't do anything since we assume either everything should stay open or will be opened by following code (i.e. before a connect)
-boolean_t sccp_channel_finishHolePunch(constChannelPtr c, boolean_t keepChannelOpen)
+/*!
+ * \brief complete a pending NAT hole punch
+ *
+ * No-op unless a punch is ACTIVE. When the call is already up, or the caller asks for it, the media transmission that was
+ * started for the punch simply stays open (the call needs it anyway, and some phones close their receive side together with
+ * the transmit side). Otherwise the transmission is stopped while the phone's port is kept open and the receive channel is
+ * (re)opened, so that early media can still reach the phone.
+ *
+ * \param c               SCCP channel
+ * \param keepChannelOpen leave the media transmission running
+ */
+void sccp_channel_finishHolePunch(constChannelPtr c, boolean_t keepChannelOpen)
 {
-	pbx_assert(c != NULL && c->privateData);
-	/*if(pbx_channel_state(c->owner) == AST_STATE_UP) {
-		sccp_log(DEBUGCAT_RTP)(VERBOSE_PREFIX_3 "%s: (%s) abort punching a hole through the firewall (channel already up)\n", c->designator, __func__);
-		c->privateData->firewall_holepunch = FALSE;
-		return FALSE;
+	pbx_assert(c != NULL);
+	sccp_rtp_t * audio = (sccp_rtp_t *)&(c->rtp.audio);
+
+	if(!sccp_rtp_transitionHolePunch(audio, SCCP_RTP_HOLEPUNCH_ACTIVE, SCCP_RTP_HOLEPUNCH_DONE)) {
+		return;
 	}
-	*/
-	//sccp_rtp_t * audio = (sccp_rtp_t *)&(c->rtp.audio);
-       /* Notice: Ye olde phones don't acknowledge the media transmission separately, since they only acknowledge reception in case both directions are open. */
-	   /* If phones fully support acknowledging start of media transmission, the following more strict check can be applied. Since we do not even consider
-		  this check without receiving a voice packet in the first place, it seems adequate to do away with it for compatibility. */
-       /* if(c->privateData->firewall_holepunch && ((sccp_rtp_getState(audio, SCCP_RTP_TRANSMISSION) & SCCP_RTP_STATUS_ACTIVE) == SCCP_RTP_STATUS_ACTIVE)) { */
-       if(c->privateData->firewall_holepunch) {
-		if(!keepChannelOpen) {
-			sccp_log(DEBUGCAT_RTP)(VERBOSE_PREFIX_3 "%s: (%s) stop punching a hole through the firewall\n", c->designator, __func__);
-			sccp_channel_stopMediaTransmission(c, TRUE);
-			sccp_channel_openReceiveChannel(c);
-		} else {
-			sccp_log(DEBUGCAT_RTP)(VERBOSE_PREFIX_3 "%s: (%s) stop punching a hole through the firewall while leaving channel open\n", c->designator, __func__);
-		}
-		c->privateData->firewall_holepunch = FALSE;
+	if(keepChannelOpen || (c->owner && pbx_channel_state(c->owner) == AST_STATE_UP)) {
+		sccp_log(DEBUGCAT_RTP)(VERBOSE_PREFIX_3 "%s: (%s) hole punched, leaving media transmission open\n", c->designator, __func__);
+		return;
 	}
-	// New: After closing the media transmission used exclusively for punching the hole,
-	//      the receive channel is opened afterwards. In case the media transmission is left open, we assume that the receive channel is already
-	//      open since in the semantics of the phones they either send, send & receive, but never should only send.
-	//		We use this for cases where we are already connected / are about to connect the channel and would open the media transmission somewhere else
-	//		Yet to be checked if this is actually needed.
-	//      This is a workaround only for our trick.
-	return c->privateData->firewall_holepunch;
+	sccp_log(DEBUGCAT_RTP)(VERBOSE_PREFIX_3 "%s: (%s) hole punched, stopping the burst\n", c->designator, __func__);
+	/* Old phones acknowledge the transmission only together with the reception, so we do not wait for a transmission ACK here. */
+	sccp_channel_stopMediaTransmission(c, TRUE);
+	sccp_channel_openReceiveChannel(c);
 }
 
 /*!
@@ -934,20 +925,9 @@ int sccp_channel_receiveChannelOpen(sccp_device_t *d, sccp_channel_t *c)
 
 	if(c->owner && !pbx_check_hangup_locked(c->owner)) {
 		sccp_rtp_runCallback(audio, SCCP_RTP_RECEPTION, c);
-		//if(c->calltype != SKINNY_CALLTYPE_INBOUND) {
-			// Has been replaced by holepunch from progress
-			//if(d->nat >= SCCP_NAT_ON) {
-				// \todo Maybe what we need here is a simple state machine to check if we have already punched a hole once,
-				//       and then decide if punching is necessary during the lifetime of a call.
-				//       Then, it might make sense to postpone opening of the receive channel to a later time when the hole punching
-				//       is finished. This would avoid the problem that the newer phones seem to close their receive channel, too, when closing the sending channel.
-				//       This causes a lot of confusion, and the aforementioned solution seems more sensible than the workaround of letting the channel open upon finishing the holepunch.
-				//sccp_channel_startHolePunch(c);
-			//}
-			iPbx.queue_control(c->owner, (enum ast_control_frame_type)-1);						// 'PROD' the remote side to let them know
-																// we can receive inband signalling from this
-																// moment onwards -> inband signalling required
-		//}
+		/* a NAT hole punch (if needed) was started from makeProgress(), here we only tell the remote side that inband
+		 * signalling can be received from this moment onwards */
+		iPbx.queue_control(c->owner, (enum ast_control_frame_type)-1);						// 'PROD' the remote side
 	}
 	return sccp_rtp_getState(audio, SCCP_RTP_RECEPTION);
 }
@@ -987,6 +967,9 @@ void sccp_channel_closeReceiveChannel(constChannelPtr channel, boolean_t KeepPor
 		msg->data.CloseReceiveChannel.lel_portHandlingFlag = htolel(KeepPortOpen);
 		sccp_dev_send(d, msg);
 		sccp_rtp_setState(audio, SCCP_RTP_RECEPTION, SCCP_RTP_STATUS_INACTIVE);
+		if(!KeepPortOpen) {
+			sccp_rtp_resetHolePunch(audio);										/* port lifetime ended, allow a new punch */
+		}
 	}
 }
 
@@ -2428,6 +2411,8 @@ int __sccp_channel_destroy(const void * data)
 	sccp_line_release((sccp_line_t **)&channel->line);
 	/* */
 
+	sccp_rtp_deinit(&channel->rtp.audio);
+	sccp_rtp_deinit(&channel->rtp.video);
 	sccp_channel_unlock(channel);
 	pbx_mutex_destroy(&channel->lock);
 	return 0;
