@@ -71,11 +71,7 @@ static struct ast_channel *announce_request(const char *type, struct ast_format_
 	ast_set_flag(&pvt->base, AST_UNREAL_NO_OPTIMIZATION);
 	ast_copy_string(pvt->base.name, conf_name, sizeof(pvt->base.name));
 
-#if !defined(CS_AST_CHANNEL_CALLID_TYPEDEF)
-	chan = ast_unreal_new_channels(&pvt->base, sccpconf_announce_get_tech(), AST_STATE_UP, AST_STATE_UP, NULL, NULL, assignedids, requestor, NULL);
-#else
-	chan = ast_unreal_new_channels(&pvt->base, sccpconf_announce_get_tech(), AST_STATE_UP, AST_STATE_UP, NULL, NULL, assignedids, requestor, 0);
-#endif
+	chan = ast_unreal_new_channels(&pvt->base, sccpconf_announce_get_tech(), AST_STATE_UP, AST_STATE_UP, NULL, NULL, assignedids, requestor, 0 /* ast_callid */);
 	if (chan) {
 		ast_answer(pvt->base.owner);
 		ast_answer(pvt->base.chan);

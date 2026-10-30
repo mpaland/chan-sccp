@@ -12,7 +12,7 @@ dnl (Asterisk 20 -> "9.0.0", 21 -> "10.0.0", 22 -> "11.0.0"). The pkg-config ver
 dnl and to pick up the minor version. --with-asterisk-version=MAJOR[.MINOR] overrides detection.
 dnl
 dnl Defines: ASTERISK_VERSION_MAJOR (e.g. 22), ASTERISK_VERSION_GROUP (100 + major, e.g. 122, kept for legacy
-dnl          comparisons) and ASTERISK_VERSION_NUMBER (major * 100 + minor, e.g. 12205).
+dnl          comparisons) and ASTERISK_VERSION_NUMBER (10000 + major * 100 + minor, e.g. 12205).
 AC_DEFUN([AST_GET_VERSION], [
 	CONFIGURE_PART([Checking Asterisk Version:])
 	AC_ARG_WITH([asterisk-version],
@@ -47,13 +47,19 @@ AC_DEFUN([AST_GET_VERSION], [
 	], [
 		AC_CHECK_HEADER([asterisk/ast_version.h], [], [AC_MSG_ERROR([asterisk/ast_version.h not found. chan-sccp needs the development headers of Asterisk >= 20 (asterisk-dev / asterisk-devel, or 'make install-headers').])], [${cs_ast_header_include}])
 		AC_MSG_CHECKING([Asterisk major version (AMI_VERSION in asterisk/manager.h)])
+		dnl locate the manager.h the compiler really uses (via the include trace) and read the define from the file
+		dnl (expanding the macro through the preprocessor is not reliable with every compiler)
 		cat > conftest.$ac_ext <<_ACEOF
 ${cs_ast_header_include}
 #include <asterisk/manager.h>
-cs_ami_version_marker AMI_VERSION
 _ACEOF
-		cs_ami_major=`(eval "$ac_cpp conftest.$ac_ext") 2>/dev/null | ${SED} -n 's/^cs_ami_version_marker[[ 	]]*"\([[0-9]][[0-9]]*\)\..*$/\1/p' | head -n1`
+		cs_manager_h=`(eval "$ac_cpp -H conftest.$ac_ext") 2>&1 >/dev/null | ${SED} -n 's/^\.[[. ]]*\(.*asterisk\/manager\.h\)[[ 	]]*$/\1/p' | head -n1`
 		rm -f conftest.$ac_ext conftest.$ac_objext
+		AS_IF([test -z "${cs_manager_h}" || test ! -r "${cs_manager_h}"], [
+			AS_IF([test -r "${PBX_INCLUDE}/manager.h"], [cs_manager_h="${PBX_INCLUDE}/manager.h"], [cs_manager_h="${PBX_INCLUDE}/asterisk/manager.h"])
+		])
+		dnl note: '@%:@' is the autoconf quadrigraph for '#', which would otherwise start an m4 comment
+		cs_ami_major=`${SED} -n 's/^@%:@[[ 	]]*define[[ 	]]*AMI_VERSION[[ 	]]*"\([[0-9]][[0-9]]*\)\..*$/\1/p' "${cs_manager_h}" 2>/dev/null | head -n1`
 		AS_IF([test -z "${cs_ami_major}"], [
 			AC_MSG_RESULT([unknown])
 			AC_MSG_ERROR([could not determine the Asterisk version from asterisk/manager.h. Use --with-asterisk-version=MAJOR.MINOR to specify it.])
@@ -72,12 +78,12 @@ _ACEOF
 	])
 
 	ASTERISK_VERSION_GROUP=`expr 100 + ${ASTERISK_VERSION_MAJOR}`
-	ASTERISK_VERSION_NUMBER=`expr ${ASTERISK_VERSION_MAJOR} \* 100 + ${ASTERISK_VERSION_MINOR}`
+	ASTERISK_VERSION_NUMBER=`expr 10000 + ${ASTERISK_VERSION_MAJOR} \* 100 + ${ASTERISK_VERSION_MINOR}`
 	ASTERISK_VER_GROUP="${ASTERISK_VERSION_GROUP}"
 
 	AC_DEFINE_UNQUOTED([ASTERISK_VERSION_MAJOR], [${ASTERISK_VERSION_MAJOR}], [Asterisk major version (e.g. 22)])
 	AC_DEFINE_UNQUOTED([ASTERISK_VERSION_GROUP], [${ASTERISK_VERSION_GROUP}], [Asterisk version group: 100 + major (e.g. 122)])
-	AC_DEFINE_UNQUOTED([ASTERISK_VERSION_NUMBER], [${ASTERISK_VERSION_NUMBER}], [Asterisk version number: major * 100 + minor (e.g. 12205)])
+	AC_DEFINE_UNQUOTED([ASTERISK_VERSION_NUMBER], [${ASTERISK_VERSION_NUMBER}], [Asterisk version number: 10000 + major * 100 + minor (e.g. 12205), legacy encoding])
 	AC_SUBST([ASTERISK_VERSION_MAJOR])
 	AC_SUBST([ASTERISK_VERSION_GROUP])
 	AC_SUBST([ASTERISK_VERSION_NUMBER])
@@ -112,7 +118,7 @@ AC_DEFUN([AST_CHECK_HEADERS],[
 #include <asterisk/buildopts.h>
 "
 	dnl headers chan-sccp cannot live without; missing ones indicate an incomplete asterisk-dev installation
-	AC_CHECK_HEADERS([asterisk.h asterisk/autoconfig.h asterisk/buildopts.h asterisk/lock.h asterisk/channel.h asterisk/pbx.h asterisk/bridge.h asterisk/rtp_engine.h asterisk/format_cache.h asterisk/stasis.h asterisk/stasis_endpoints.h asterisk/mwi.h asterisk/pickup.h asterisk/parking.h asterisk/manager.h asterisk/http.h asterisk/cel.h asterisk/message.h asterisk/backtrace.h asterisk/vector.h],
+	AC_CHECK_HEADERS([asterisk.h asterisk/autoconfig.h asterisk/buildopts.h asterisk/lock.h asterisk/channel.h asterisk/pbx.h asterisk/bridge.h asterisk/rtp_engine.h asterisk/format_cache.h asterisk/stasis.h asterisk/mwi.h asterisk/pickup.h asterisk/parking.h asterisk/manager.h asterisk/http.h asterisk/backtrace.h asterisk/vector.h],
 		[],
 		[AC_MSG_ERROR([required Asterisk header '$ac_header' not found. Install the Asterisk >= 20 development headers (asterisk-dev / asterisk-devel or 'make install-headers').])],
 		[${HEADER_INCLUDE}])

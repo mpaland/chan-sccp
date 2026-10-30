@@ -8,58 +8,6 @@
 #pragma once
 #include "config.h"
 
-/*
- * Asterisk >= 20 feature set.
- * These used to be probed by configure for every supported Asterisk release. Since chan-sccp requires
- * Asterisk >= 20 their value is fixed; they are kept as plain defines until the remaining conditionals in
- * the sources have been removed.
- */
-#define CS_AST_HAS_NAMEDGROUP 1
-#define CS_AST_CHANNEL_CALLID_TYPEDEF 1
-#define CS_AST_HAS_APP_SEPARATE_ARGS 1
-#define sccp_app_separate_args(x, y, z, w) ast_app_separate_args(x, y, z, w)
-#define CS_AST_JB_TARGETEXTRA 1
-#define CS_BRIDGE_BASE_NEW 1
-#define CS_BRIDGE_JOIN_PASSREFERENCE 1
-#define CS_BRIDGE_DEPART_ONLY_CHANNEL 1
-#define CS_DEVICESTATE 1
-#define CS_CACHEABLE_DEVICESTATE 1
-#define CS_AST_ENABLE_DISTRIBUTED_DEVSTATE 1
-#define CS_AST_HAS_STASIS 1
-#define CS_AST_HAS_STASIS_SUBSCRIPTION_SET_FILTER 1
-#define CS_AST_HAS_STASIS_ENDPOINT 1
-#define CS_AST_DO_PICKUP 1
-#define CS_AST_CONTROL_REDIRECTING 1
-#define CS_AST_MANAGER_CHECK_ENABLED 1
-#define CS_AST_HAS_NEW_HINT 1
-#define CS_AST_HAS_EXTENSION_ONHOLD 1
-#define CS_AST_HAS_EXTENSION_RINGING 1
-#define CS_AST_HAS_EXTENSION_STATE_CB_TYPE_CONST_CHAR 1
-#define CS_AST_HAS_CONTEXT_DESTROY_BY_NAME 1
-#define CS_AST_BACKTRACE_VECTOR_STRING 1
-#define MWI_USE_EVENT 1
-#define HAVE_PBX_ACL_H 1
-#define HAVE_PBX_APP_H 1
-#define HAVE_PBX_STASIS_H 1
-#define HAVE_PBX_FEATURES_H 1
-#define HAVE_PBX_MANAGER_HOOK_H 1
-#define HAVE_PBX_RTP_ENGINE_H 1
-#define HAVE_PBX_STRINGS_H 1
-#define HAVE_PBX_CEL_H 1
-#define HAVE_PBX_MESSAGE_H 1
-#define HAVE_PBX_MWI_H 1
-#define HAVE_PBX_HTTP_H 1
-/* ast_channel private data accessors */
-#define CS_AST_CHANNEL_PVT(_a) ((sccp_channel_t *)ast_channel_tech_pvt(_a))
-#define CS_AST_CHANNEL_PVT_TYPE(_a) ast_channel_tech(_a)->type
-#define CS_AST_CHANNEL_PVT_CMP_TYPE(_a, _b) !strncasecmp(CS_AST_CHANNEL_PVT_TYPE(_a), _b, strlen(_b))
-#define CS_AST_CHANNEL_PVT_IS_SCCP(_a) CS_AST_CHANNEL_PVT_CMP_TYPE((_a), "SCCP")
-/* backtrace helpers */
-#define bt_string_t struct ast_vector_string
-#define bt_free ast_bt_free_symbols
-/* SCCP_MAX_* limits live in src/define.h; this one needs asterisk/channel.h */
-#define SCCP_MAX_ACCOUNT_CODE AST_MAX_ACCOUNT_CODE
-
 // type redefinitions
 #define pbx_variable ast_variable
 #define pbx_context ast_context

@@ -13,13 +13,9 @@
 
 #include <asterisk.h>
 #include <asterisk/pbx.h>			// AST_EXTENSION_NOT_INUSE in mapping below
-#ifdef HAVE_PBX_RTP_ENGINE_H			// sccp_callinfo, sccp_rtp
-#  define new avoid_cxx_new_keyword
-#  include <asterisk/rtp_engine.h>
-#  undef new
-#else
-#  include <asterisk/rtp.h>
-#endif
+#define new avoid_cxx_new_keyword		// sccp_callinfo, sccp_rtp
+#include <asterisk/rtp_engine.h>
+#undef new
 #  include <asterisk/manager.h>
 #include <asterisk/causes.h>
 #include <asterisk/buildopts.h>
