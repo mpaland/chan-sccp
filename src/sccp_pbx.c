@@ -413,9 +413,7 @@ int sccp_pbx_call(channelPtr c, const char * dest, int timeout)
 		/* when single line -> use asterisk functionality directly, without creating new channel + masquerade */
 		pbx_log(LOG_NOTICE, "%s: handle cfwd to %s for line %s\n", ForwardingLineDevice->device->id,
 			ForwardingLineDevice->cfwd[SCCP_CFWD_ALL].enabled ? ForwardingLineDevice->cfwd[SCCP_CFWD_ALL].number : ForwardingLineDevice->cfwd[SCCP_CFWD_BUSY].number, l->name);
-#if CS_AST_CONTROL_REDIRECTING
 		iPbx.queue_control(c->owner, AST_CONTROL_REDIRECTING);
-#endif
 		pbx_channel_call_forward_set(c->owner, ForwardingLineDevice->cfwd[SCCP_CFWD_ALL].enabled ? ForwardingLineDevice->cfwd[SCCP_CFWD_ALL].number : ForwardingLineDevice->cfwd[SCCP_CFWD_BUSY].number);
 		sccp_device_sendcallstate(ForwardingLineDevice->device, ForwardingLineDevice->lineInstance, c->callid, SKINNY_CALLSTATE_INTERCOMONEWAY, SKINNY_CALLPRIORITY_NORMAL, SKINNY_CALLINFO_VISIBILITY_DEFAULT);
 		sccp_channel_send_callinfo(ForwardingLineDevice->device, c);
@@ -490,9 +488,7 @@ int sccp_pbx_cfwdnoanswer_cb(const void * data)
 			if(num_devices == 1) {
 				/* when single line -> use asterisk functionality directly, without creating new channel + masquerade */
 				sccp_log(DEBUGCAT_PBX)("%s: Redirecting call to callforward noanswer:%s\n", c->designator, ld->cfwd[SCCP_CFWD_NOANSWER].number);
-#if CS_AST_CONTROL_REDIRECTING
 				iPbx.queue_control(forwarder, AST_CONTROL_REDIRECTING);
-#endif
 				pbx_channel_call_forward_set(forwarder, ld->cfwd[SCCP_CFWD_NOANSWER].number);
 				sccp_device_sendcallstate(ld->device, ld->lineInstance, c->callid, SKINNY_CALLSTATE_INTERCOMONEWAY, SKINNY_CALLPRIORITY_NORMAL, SKINNY_CALLINFO_VISIBILITY_DEFAULT);
 				sccp_channel_send_callinfo(ld->device, c);
@@ -683,11 +679,6 @@ int sccp_pbx_remote_answer(constChannelPtr channel)
 			sccp_channel_release(&c->parentChannel);
 			if(destination) {
 				sccp_log((DEBUGCAT_PBX))(VERBOSE_PREFIX_3 "%s: (%s) handling forwarded call. Replace %s with %s.\n", c->designator, __func__, pbx_channel_name(forwarder), pbx_channel_name(destination));
-#if ASTERISK_VERSION_GROUP < 116
-				/* set the channel and the bridge to state UP to fix problem with fast pickup / autoanswer */
-				pbx_setstate(tmp_channel, AST_STATE_UP);
-				pbx_setstate(destination, AST_STATE_UP);
-#endif
 				if(!iPbx.masqueradeHelper(destination, forwarder)) {
 					pbx_log(LOG_ERROR, "%s: (%s) Failed to masquerade bridge into forwarded channel\n", c->designator, __func__);
 					if(destination) {
@@ -696,10 +687,8 @@ int sccp_pbx_remote_answer(constChannelPtr channel)
 					res = -3;
 					break;
 				}
-#if ASTERISK_VERSION_GROUP > 106
 				// Note: destination has taken the place of forwarder
 				pbx_indicate(forwarder, AST_CONTROL_CONNECTED_LINE);
-#endif
 				sccp_log((DEBUGCAT_PBX))(VERBOSE_PREFIX_4 "%s: (%s) Masqueraded into %s\n", c->designator, __func__, pbx_channel_name(forwarder));
 				res = 0;
 			} else {
@@ -780,11 +769,9 @@ boolean_t sccp_pbx_channel_allocate(constChannelPtr channel, const void * ids, c
 	}
 	pbx_assert(c->owner == NULL);										// prevent calling this function when the channel already has a pbx channel
 	
-#ifndef CS_AST_CHANNEL_HAS_CID
 	char cidtmp[256];
 
 	memset(&cidtmp, 0, sizeof(cidtmp));
-#endif														// CS_AST_CHANNEL_HAS_CID
 
 	AUTO_RELEASE(sccp_line_t, l , sccp_line_retain(c->line));
 	if (!l) {
@@ -1447,59 +1434,5 @@ EXIT_FUNC:
 	return NULL;
 }
 
-#if 0
-/*!
- * \brief Handle Dialplan Transfer
- *
- * This will allow asterisk to transfer an SCCP Channel via the dialplan transfer function
- *
- * \param ast Asterisk Channel
- * \param dest Destination as char *
- * \return result as int
- *
- * \test Dialplan Transfer Needs to be tested
- * \todo pbx_transfer needs to be implemented correctly
- *
- * \called_from_asterisk
- */
-int sccp_pbx_transfer(PBX_CHANNEL_TYPE * ast, const char *dest)
-{
-	int res = 0;
-
-	if (dest == NULL) {											/* functions below do not take a NULL */
-		dest = "";
-		return -1;
-	}
-
-	AUTO_RELEASE(sccp_channel_t, c , get_sccp_channel_from_pbx_channel(ast));
-
-	if (!c) {
-		return -1;
-	}
-
-	/*
-	   sccp_device_t *d = NULL;
-	   sccp_channel_t *newcall = NULL;
-	 */
-
-	sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_1 "Transferring '%s' to '%s'\n", iPbx.getChannelName(c), dest);
-	if (pbx_channel_state(ast) == AST_STATE_RING) {
-		//! \todo Blindtransfer needs to be implemented correctly
-
-		/*
-		   res = sccp_blindxfer(p, dest);
-		 */
-		res = -1;
-	} else {
-		//! \todo Transfer needs to be implemented correctly
-
-		/*
-		   res=sccp_channel_transfer(p,dest);
-		 */
-		res = -1;
-	}
-	return res;
-}
-#endif
 
 // kate: indent-width 8; replace-tabs off; indent-mode cstyle; auto-insert-doxygen on; line-numbers on; tab-indents on; keep-extra-spaces off; auto-brackets off;

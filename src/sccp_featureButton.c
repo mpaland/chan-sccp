@@ -32,9 +32,6 @@
 
 SCCP_FILE_VERSION(__FILE__, "");
 
-#if defined(CS_AST_HAS_EVENT) && defined(HAVE_PBX_EVENT_H) 	// ast_event_subscribe
-#  include <asterisk/event.h>
-#endif
 
 /*!
  * \brief Feature Button Changed

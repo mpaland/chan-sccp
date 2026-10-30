@@ -42,12 +42,8 @@ SCCP_FILE_VERSION(__FILE__, "");
 #include <asterisk/causes.h>		//AST_CAUSE_NORMAL_CLEARING
 
 #if CS_SCCP_PICKUP
-#  if defined(CS_AST_DO_PICKUP) && defined(HAVE_PBX_FEATURES_H)
 #    include <asterisk/features.h>
-#    if ASTERISK_VERSION_GROUP >= 112
 #      include <asterisk/pickup.h>
-#    endif
-#  endif
 #endif
 
 /* forward declarations */
@@ -136,7 +132,6 @@ static int sccp_feat_perform_pickup(constDevicePtr d, channelPtr c, PBX_CHANNEL_
 	int res = 0;
 	pbx_assert(c != NULL);
 
-#if CS_AST_DO_PICKUP
 	PBX_CHANNEL_TYPE *original = c->owner;
 	char * target_name = NULL;
 	char * target_number = NULL;
@@ -239,9 +234,6 @@ static int sccp_feat_perform_pickup(constDevicePtr d, channelPtr c, PBX_CHANNEL_
 		c->setTone(c, SKINNY_TONE_BEEPBONK, SKINNY_TONEDIRECTION_USER);
 		sccp_channel_schedule_hangup(c, 5000);
 	}
-#else
-	pbx_log(LOG_NOTICE, "%s: (directed_pickup) no support for pickup in asterisk\n");
-#endif
 	return res;
 }
 
@@ -255,7 +247,6 @@ static int sccp_feat_perform_pickup(constDevicePtr d, channelPtr c, PBX_CHANNEL_
  */
 void sccp_feat_handle_directed_pickup(constDevicePtr d, constLinePtr l, channelPtr maybe_c)
 {
-#if CS_AST_DO_PICKUP
 	if (!l || !d) {
 		pbx_log(LOG_ERROR, "SCCP: Can't allocate SCCP channel if line or device are not defined!\n");
 		return;
@@ -273,9 +264,6 @@ void sccp_feat_handle_directed_pickup(constDevicePtr d, constLinePtr l, channelP
 		iPbx.set_callstate(c, AST_STATE_OFFHOOK);
 		sccp_channel_stop_schedule_digittimout(c);
 	}
-#else
-	pbx_log(LOG_NOTICE, "%s: (directed_pickup) no support for pickup in asterisk\n");
-#endif
 }
 
 /*!
@@ -292,14 +280,11 @@ void sccp_feat_handle_directed_pickup(constDevicePtr d, constLinePtr l, channelP
 int sccp_feat_directed_pickup(constDevicePtr d, channelPtr c, uint32_t lineInstance, const char *exten)
 {
 	int res = -1;
-#if CS_AST_DO_PICKUP
 
 	/* assertions */
 	pbx_assert(c && c->line && c->owner && d);
 	if (!c->line->pickupgroup
-#if CS_AST_HAS_NAMEDGROUP
 	    && sccp_strlen_zero(c->line->namedpickupgroup)
-#endif
 	    ) {
 		sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_3 "%s: (directedpickup) pickupgroup not configured in sccp.conf\n", d->id);
 		return -1;
@@ -357,9 +342,7 @@ int sccp_feat_directed_pickup(constDevicePtr d, channelPtr c, uint32_t lineInsta
 			pbx_log(LOG_NOTICE, "%s: (directed_pickup) target channel found: %s (callgroup:'%lld', namedcallgroups:'%s').\n", d->id, ast_channel_name(target), ast_channel_callgroup(target), pbx_str_buffer(buf));
 			// BTW: Remote end should change it's calltype for callinfo to FORWARD, upon pickup. Not sure how to inform them
 			// iCallInfo.Send(ci, c->callid, SKINNY_CALLTYPE_FORWARD, lineInstance, d, TRUE);
-#if ASTERISK_VERSION_GROUP > 106
 			iPbx.queue_control(target, AST_CONTROL_REDIRECTING);
-#endif			
 			sccp_device_setLamp(d, SKINNY_STIMULUS_CALLPICKUP, lineInstance, SKINNY_LAMP_FLASH);
 			res = sccp_feat_perform_pickup(d, c, target, c->line->pickup_modeanswer);			/* unlocks target */
 			target = pbx_channel_unref(target);
@@ -379,9 +362,6 @@ int sccp_feat_directed_pickup(constDevicePtr d, channelPtr c, uint32_t lineInsta
 	} else {
 		pbx_log(LOG_ERROR, "SCCP: Unable to grab a reference of the original channel owner\n");
 	}
-#else
-	pbx_log(LOG_NOTICE, "%s: (directed_pickup) no support for pickup in asterisk\n");
-#endif
 	return res;
 }
 
@@ -406,16 +386,13 @@ int sccp_feat_grouppickup(constDevicePtr d, constLinePtr l, uint32_t lineInstanc
 
 	/* assertions */
 	pbx_assert(d != NULL && l != NULL);
-#if CS_AST_DO_PICKUP
 	if (!iPbx.findPickupChannelByGroupLocked) {
 		pbx_log(LOG_WARNING, "SCCP: (directed_pickup) findPickupChannelByExtenLocked not implemented for this asterisk version. Giving up.\n");
 		return -1;
 	}
 
 	if (!l->pickupgroup
-#if CS_AST_HAS_NAMEDGROUP
 	    && sccp_strlen_zero(l->namedpickupgroup)
-#endif
 	    ) {
 		sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_3 "%s: (grouppickup) pickupgroup not configured in sccp.conf\n", d->id);
 		return -1;
@@ -471,9 +448,6 @@ int sccp_feat_grouppickup(constDevicePtr d, constLinePtr l, uint32_t lineInstanc
 			pbx_log(LOG_ERROR, "SCCP: Unable to grab a reference of the original channel owner\n");
 		}
 	}
-#else
-	pbx_log(LOG_NOTICE, "%s: (directed_pickup) no support for pickup in asterisk\n");
-#endif
 	return res;
 }
 #endif														// CS_SCCP_PICKUP
@@ -923,13 +897,8 @@ static void *sccp_feat_meetme_thread(void *data)
 
 	char meetmeopts[SCCP_MAX_CONTEXT];
 
-#if ASTERISK_VERSION_NUMBER >= 10600
 #define SCCP_CONF_SPACER ','
-#endif
 
-#if ASTERISK_VERSION_NUMBER >= 10400 && ASTERISK_VERSION_NUMBER < 10600
-#define SCCP_CONF_SPACER '|'
-#endif
 
 	unsigned int eid = sccp_random();
 	AUTO_RELEASE(sccp_channel_t, c , sccp_channel_retain(data));

@@ -14,15 +14,9 @@
 //#define AMI28 "2.8"	// used by asterisk-13
 //#if $AMI_VERSION == $AMI25 || $AMI_VERSION == $AMI28
 
-#if ASTERISK_VERSION_GROUP >= 112
 #define PARKING_PREFIX "Parkee"
 #define PARKING_FROM "ParkeeExten"
 #define PARKING_SLOT "ParkingSpace"
-#else
-#define PARKING_PREFIX ""
-#define PARKING_FROM "From"
-#define PARKING_SLOT "Exten"
-#endif
 
 #endif
 __BEGIN_C_EXTERN__

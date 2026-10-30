@@ -26,9 +26,7 @@ SCCP_FILE_VERSION(__FILE__, "");
 
 static const uint32_t appID = APPID_VISUALPARKINGLOT;
 
-#ifdef HAVE_PBX_APP_H
 #  include <asterisk/app.h>
-#endif
 
 /* asterisk-11 */
 /*
