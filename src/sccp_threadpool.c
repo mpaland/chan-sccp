@@ -262,8 +262,8 @@ void *sccp_threadpool_thread_do(void *p)
 /* Add work to the thread pool */
 int sccp_threadpool_add_work(sccp_threadpool_t * tp_p, void *(*function_p) (void *), void *arg_p)
 {
-	// prevent new work while shutting down
-	if (!tp_p->sccp_threadpool_shuttingdown) {
+	// prevent new work while shutting down (or after the pool is gone)
+	if (tp_p && !tp_p->sccp_threadpool_shuttingdown) {
 		sccp_threadpool_job_t * newJob = NULL;
 
 		if (!(newJob = (sccp_threadpool_job_t *) sccp_calloc(sizeof *newJob, 1))) {

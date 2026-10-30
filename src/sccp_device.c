@@ -638,6 +638,7 @@ devicePtr sccp_device_create(const char * id)
 	SCCP_LIST_HEAD_INIT(&d->buttonconfig);
 	SCCP_LIST_HEAD_INIT(&d->selectedChannels);
 	SCCP_LIST_HEAD_INIT(&d->addons);
+	SCCP_LIST_HEAD_INIT(&d->permithosts);                                        /* destroyed in __sccp_device_destroy, was never initialised */
 	if (iPbx.endpoint_create) {
 		d->endpoint = iPbx.endpoint_create("SCCP", id);
 	}

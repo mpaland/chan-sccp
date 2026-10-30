@@ -273,13 +273,13 @@ int sccp_preUnload(void)
 	if (SCCP_RWLIST_EMPTY(&GLOB(lines))) {
 		SCCP_RWLIST_HEAD_DESTROY(&GLOB(lines));
 	}
-	iVoicemail.stopModule();
-	usleep(100);												// wait for events to finalize
-
-	sccp_event_module_stop();
-
-	/* stop services */
+	/* stop services: sessions first (their teardown still fires events through the threadpool), then drain and destroy
+	 * the threadpool, and only then take the event system away */
 	sccp_session_terminateAll();
+	sccp_threadpool_destroy(GLOB(general_threadpool));
+	GLOB(general_threadpool) = NULL;
+	iVoicemail.stopModule();
+	sccp_event_module_stop();
 	sccp_manager_module_stop();
 #ifdef CS_DEVSTATE_FEATURE	
 	sccp_devstate_module_stop();
@@ -288,7 +288,6 @@ int sccp_preUnload(void)
 	sccp_conference_module_stop();
 #endif
 	sccp_softkey_clear();
-	sccp_threadpool_destroy(GLOB(general_threadpool));
 	sccp_refcount_destroy();
 
 	/* free resources */

@@ -3605,11 +3605,12 @@ static void unregister_channel_tech(struct ast_channel_tech *tech)
 static int unload_module(void)
 {
 	pbx_log(LOG_NOTICE, "SCCP: Module Unload\n");
-	sccp_preUnload();
+
+	/* detach from asterisk first: no new channel requests, cli/ami commands, dialplan functions or rtp glue
+	 * calls may reach us while the sccp side is being torn down (sccp_preUnload destroys the refcount system) */
 	sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_2 "SCCP: Unregister SCCP RTP protocol\n");
 	ast_rtp_glue_unregister(&sccp_rtp);
 	sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_2 "SCCP: Unregister SCCP Channel Tech\n");
-
 	unregister_channel_tech(&sccp_tech);
 	sccp_unregister_dialplan_functions();
 	sccp_unregister_cli();
@@ -3621,13 +3622,19 @@ static int unload_module(void)
 	unregister_channel_tech(sccpconf_announce_get_tech());
 #endif
 
+	if (sccp_globals) {                                        /* load_module can fail before sccp_prePBXLoad() allocated the globals */
+		sccp_preUnload();
+	}
+
 	if (io) {
 		io_context_destroy(io);
 		io = NULL;
 	}
 
-	while (SCCP_REF_DESTROYED != sccp_refcount_isRunning()) {
-		usleep(SCCP_TIME_TO_KEEP_REFCOUNTEDOBJECT);							// give enough time for all schedules to end and refcounted object to be cleanup completely
+	if (sccp_globals) {
+		while (SCCP_REF_DESTROYED != sccp_refcount_isRunning()) {
+			usleep(SCCP_TIME_TO_KEEP_REFCOUNTEDOBJECT);                                        // give enough time for all schedules to end and refcounted object to be cleanup completely
+		}
 	}
 
 	if (sched) {
@@ -3644,9 +3651,11 @@ static int unload_module(void)
 	}
 
 	pbx_log(LOG_NOTICE, "Running Cleanup\n");
-	sccp_free(sccp_globals);
+	if (sccp_globals) {
+		sccp_free(sccp_globals);
+	}
 	pbx_log(LOG_NOTICE, "Module chan_sccp unloaded\n");
-	pbx_module_unref(pbx_module_info->self);
+	/* note: no pbx_module_unref() here, load_module() never took a reference (the per channel ref/unref pair lives in setOwner) */
 	return 0;
 }
 
