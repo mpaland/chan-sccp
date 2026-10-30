@@ -1425,19 +1425,16 @@ void sccp_handle_button_template_req(constSessionPtr s, devicePtr d, constMessag
 	}
 
 	/* pre-attach lines. We will wait for button template req if the phone does support it */
-	if (d->buttonTemplate) {
-		sccp_free(d->buttonTemplate);
-	}
+	sccp_dev_freeButtonTemplate(d);                                        /* releases the line references held by a previous template */
 	btn = d->buttonTemplate = sccp_make_button_template(d);
-
-	/* update lineButtons array */
-	sccp_linedevice_createButtonsArray(d);
-
 	if (!btn) {
 		pbx_log(LOG_ERROR, "%s: No memory allocated for button template\n", d->id);
 		sccp_session_stopthread(s, SKINNY_DEVICE_RS_FAILED);
 		return;
 	}
+
+	/* update lineButtons array */
+	sccp_linedevice_createButtonsArray(d);
 
 	REQ(msg_out, ButtonTemplateMessage);
 	if (!msg_out) {
@@ -4613,6 +4610,7 @@ void handle_extension_devicecaps(constSessionPtr s, devicePtr d, constMessagePtr
 		sccp_addon_t *addon = (sccp_addon_t *)sccp_calloc(1, sizeof(sccp_addon_t));
 		if (!addon) {
 			pbx_log(LOG_ERROR, SS_Memory_Allocation_Error, "SCCP");
+			SCCP_LIST_UNLOCK(&d->addons);
 			return;
 		}
 		addon->type = SKINNY_DEVICETYPE_UNDEFINED;
@@ -4663,9 +4661,13 @@ void handle_device_to_user(constSessionPtr s, devicePtr d, constMessagePtr msg_i
 	transactionID = letohl(msg_in->data.DeviceToUserDataVersion1Message.lel_transactionID);
 
 	dataLength = letohl(msg_in->data.DeviceToUserDataVersion1Message.lel_dataLength);
+	if (dataLength >= sizeof(data) || dataLength > sizeof(msg_in->data.DeviceToUserDataVersion1Message.data)) {
+		pbx_log(LOG_WARNING, "%s: DeviceToUserData length %u exceeds the maximum of %u, truncating\n", d->id, (unsigned)dataLength, (unsigned)(sizeof(data) - 1));
+		dataLength = sizeof(data) - 1;
+	}
 	if (dataLength) {
-		memset(data, 0, dataLength);
 		memcpy(data, msg_in->data.DeviceToUserDataVersion1Message.data, dataLength);
+		data[dataLength] = '\0';
 	}
 
 	if (lineInstance == 0 && callReference == 0) {
@@ -4676,6 +4678,9 @@ void handle_device_to_user(constSessionPtr s, devicePtr d, constMessagePtr msg_i
 			char str_transactionID[11] = "";
 			if (sscanf(data, "%10[^/]/%10s", str_action, str_transactionID) > 0) {
 				sccp_log((DEBUGCAT_CONFERENCE + DEBUGCAT_MESSAGE + DEBUGCAT_ACTION)) (VERBOSE_PREFIX_3 "%s: Handle DTU Softkey Button:%s, %s\n", d->id, str_action, str_transactionID);
+				if (d->dtu_softkey.action) {
+					sccp_free(d->dtu_softkey.action);
+				}
 				d->dtu_softkey.action = pbx_strdup(str_action);
 				d->dtu_softkey.transactionID = sccp_atoi(str_transactionID, sizeof(str_transactionID));
 			} else {

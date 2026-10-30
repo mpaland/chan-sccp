@@ -173,9 +173,12 @@ void sccp_line_removeFromGlobals(sccp_line_t * line)
 		removed_line = SCCP_RWLIST_REMOVE(&GLOB(lines), line, list);
 		SCCP_RWLIST_UNLOCK(&GLOB(lines));
 
-		sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_3 "Removed line '%s' from Glob(lines)\n", removed_line->name);
-
-		sccp_line_release(&removed_line);								/* explicit release */
+		if (removed_line) {
+			sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_3 "Removed line '%s' from Glob(lines)\n", removed_line->name);
+			sccp_line_release(&removed_line);								/* explicit release */
+		} else {
+			pbx_log(LOG_NOTICE, "SCCP: line '%s' was not in Glob(lines)\n", line->name);
+		}
 	} else {
 		pbx_log(LOG_ERROR, "Removing null from global line list is not allowed!\n");
 	}

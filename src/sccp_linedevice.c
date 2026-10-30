@@ -391,6 +391,10 @@ void sccp_linedevice_createButtonsArray(devicePtr device)
 	}
 
 	btn = device->buttonTemplate;
+	if (!btn) {
+		pbx_log(LOG_ERROR, "%s: (createButtonsArray) no button template available\n", device->id);
+		return;
+	}
 
 	for(i = 0; i < StationMaxButtonTemplateSize; i++) {
 		if(btn[i].type == SKINNY_BUTTONTYPE_LINE && btn[i].instance > lineInstances && btn[i].ptr) {
@@ -409,9 +413,8 @@ void sccp_linedevice_createButtonsArray(devicePtr device)
 		if(btn[i].type == SKINNY_BUTTONTYPE_LINE && btn[i].ptr) {
 			ld = sccp_linedevice_find(device, (sccp_line_t *)btn[i].ptr);
 			if(!(device->lineButtons.instance[btn[i].instance] = ld)) {
-				pbx_log(LOG_ERROR, "%s: ld could not be found or retained\n", device->id);
-				device->lineButtons.size--;
-				sccp_free(device->lineButtons.instance);
+				/* leave the slot empty; freeing the array here would be a use-after-free in this loop and a double free in deleteButtonsArray */
+				pbx_log(LOG_ERROR, "%s: ld for line button instance %d could not be found or retained\n", device->id, btn[i].instance);
 			}
 		}
 	}
@@ -431,6 +434,7 @@ void sccp_linedevice_deleteButtonsArray(devicePtr device)
 		}
 		device->lineButtons.size = 0;
 		sccp_free(device->lineButtons.instance);
+		device->lineButtons.instance = NULL;
 	}
 }
 

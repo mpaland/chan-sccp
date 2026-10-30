@@ -1946,8 +1946,10 @@ static int sccp_test(int fd, int argc, char *argv[])
 				sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_2 "Sending OpenReceiveChannel and changing payloadType to 8\n");
 
 				REQ(msg1, OpenReceiveChannel);
-				if (!msg1)
+				if (!msg1) {
+					SCCP_RWLIST_UNLOCK(&GLOB(lines));
 					return RESULT_FAILURE;
+				}
 				msg1->data.OpenReceiveChannel.v17.lel_conferenceId = htolel(tmpChannel->callid);
 				msg1->data.OpenReceiveChannel.v17.lel_passThruPartyId = htolel(tmpChannel->passthrupartyid);
 				msg1->data.OpenReceiveChannel.v17.lel_millisecondPacketSize = htolel(packetSize);
@@ -1959,8 +1961,10 @@ static int sccp_test(int fd, int argc, char *argv[])
 				// sleep(1);
 				sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_2 "Sending OpenReceiveChannel and changing payloadType to 4\n");
 				REQ(msg2, OpenReceiveChannel);
-				if (!msg2)
+				if (!msg2) {
+					SCCP_RWLIST_UNLOCK(&GLOB(lines));
 					return RESULT_FAILURE;
+				}
 				msg2->data.OpenReceiveChannel.v17.lel_conferenceId = htolel(tmpChannel->callid);
 				msg2->data.OpenReceiveChannel.v17.lel_passThruPartyId = htolel(tmpChannel->passthrupartyid);
 				msg2->data.OpenReceiveChannel.v17.lel_millisecondPacketSize = htolel(packetSize);
@@ -1977,7 +1981,6 @@ static int sccp_test(int fd, int argc, char *argv[])
 	}
 	// SpeedDialStatDynamicMessage = 0x0149,
 	if (!strcasecmp(argv[2], "speeddialstatdynamic")) {
-		sccp_device_t *d = NULL;
 		sccp_buttonconfig_t *buttonconfig = NULL;
 		uint8_t instance = 0;
 		sccp_msg_t *msg1 = NULL;
@@ -1986,14 +1989,17 @@ static int sccp_test(int fd, int argc, char *argv[])
 			sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_2 "Device Not specified\n");
 			return RESULT_FAILURE;
 		}
-		if ((d = sccp_device_find_byid(argv[3], FALSE))) {
+		AUTO_RELEASE(sccp_device_t, d, sccp_device_find_byid(argv[3], FALSE));
+		if (d) {
 			SCCP_LIST_LOCK(&d->buttonconfig);
 			SCCP_LIST_TRAVERSE(&d->buttonconfig, buttonconfig, list) {
 				if (buttonconfig->type == SPEEDDIAL) {
 					instance = buttonconfig->instance;
 					REQ(msg1, SpeedDialStatDynamicMessage);
-					if (!msg1)
+					if (!msg1) {
+						SCCP_LIST_UNLOCK(&d->buttonconfig);
 						return RESULT_FAILURE;
+					}
 					msg1->data.SpeedDialStatDynamicMessage.lel_Number = htolel(instance);
 					sccp_copy_string(msg1->data.SpeedDialStatDynamicMessage.DirNumber, argv[5], sizeof(msg1->data.SpeedDialStatDynamicMessage.DirNumber));
 					sccp_copy_string(msg1->data.SpeedDialStatDynamicMessage.DisplayName, argv[6], sizeof(msg1->data.SpeedDialStatDynamicMessage.DisplayName));					
@@ -3821,7 +3827,7 @@ static int sccp_answercall(int fd, sccp_cli_totals_t *totals, struct mansession 
 				sccp_linedevice_t * ld = NULL;
 				SCCP_LIST_LOCK(&l->devices);
 				ld = SCCP_LIST_FIRST(&l->devices);
-				d = sccp_device_retain(ld->device);
+				d = ld ? sccp_device_retain(ld->device) : NULL;
 				SCCP_LIST_UNLOCK(&l->devices);
 			}
 			if (d) {

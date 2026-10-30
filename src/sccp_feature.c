@@ -234,6 +234,12 @@ static int sccp_feat_perform_pickup(constDevicePtr d, channelPtr c, PBX_CHANNEL_
 		c->setTone(c, SKINNY_TONE_BEEPBONK, SKINNY_TONEDIRECTION_USER);
 		sccp_channel_schedule_hangup(c, 5000);
 	}
+	if (target_name) {
+		sccp_free(target_name);
+	}
+	if (target_number) {
+		sccp_free(target_number);
+	}
 	return res;
 }
 
@@ -961,7 +967,8 @@ static void *sccp_feat_meetme_thread(void *data)
 		// sccp_copy_string(c->owner->exten, ext, sizeof(c->owner->exten));
 		iPbx.setChannelExten(c, ext);
 
-		if(sccp_channel_retain(c)) {                                        // explicit retain
+		AUTO_RELEASE(sccp_channel_t, retained_c, sccp_channel_retain(c));                                        // keep the channel alive while running the pbx
+		if(retained_c) {
 			sccp_indicate(d, c, SCCP_CHANNELSTATE_DIALING);
 			sccp_channel_set_calledparty(c, SKINNY_DISP_CONFERENCE, c->dialedNumber);
 			//  sccp_channel_setSkinnyCallstate(c, SKINNY_CALLSTATE_PROCEED);

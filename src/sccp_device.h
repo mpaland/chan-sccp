@@ -399,6 +399,7 @@ SCCP_API void SCCP_CALL sccp_dev_cleardisplaynotify(constDevicePtr d);
 SCCP_API void SCCP_CALL sccp_dev_cleardisplayprinotify(constDevicePtr d, const uint8_t priority);
 SCCP_API void SCCP_CALL sccp_dev_speed_find_byindex(constDevicePtr d, const uint16_t instance, boolean_t withHint, sccp_speed_t * const k);
 SCCP_API void SCCP_CALL sccp_dev_forward_status(constLinePtr l, uint8_t lineInstance, constDevicePtr device);
+SCCP_API void SCCP_CALL sccp_dev_freeButtonTemplate(devicePtr d);
 SCCP_API void SCCP_CALL _sccp_dev_clean(devicePtr device, boolean_t remove_from_global, boolean_t restart_device);
 #define sccp_dev_clean(d, r) _sccp_dev_clean(d, r, FALSE);
 #define sccp_dev_clean_restart(d, r) _sccp_dev_clean(d, r, TRUE);

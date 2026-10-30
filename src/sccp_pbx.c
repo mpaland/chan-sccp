@@ -452,7 +452,7 @@ int sccp_pbx_cfwdnoanswer_cb(const void * data)
 	AUTO_RELEASE(sccp_channel_t, c, (channelPtr)data);			// explicitly taken in sccp_channel_schedule_cfwd_noanswer, releasing on exit
 	if(!c || !c->owner) {
 		pbx_log(LOG_WARNING, "SCCP: No channel provided.\n");
-		return -1;
+		return 0;                                        /* never reschedule: our reference is gone (AUTO_RELEASE) */
 	}
 
 	if((ATOMIC_FETCH(&c->scheduler.deny, &c->scheduler.lock) == 0)) {
@@ -462,12 +462,12 @@ int sccp_pbx_cfwdnoanswer_cb(const void * data)
 	AUTO_RELEASE(sccp_line_t, l, sccp_line_retain(c->line));
 	if(!l) {
 		pbx_log(LOG_WARNING, "%s: The channel has no line. giving up.\n", c->designator);
-		return -2;
+		return 0;                                        /* never reschedule: our reference is gone (AUTO_RELEASE) */
 	}
 
 	if (sccp_channel_isAnswering(c)) {
 		sccp_log(DEBUGCAT_CHANNEL)(VERBOSE_PREFIX_2 "%s: The channel is already being answered. canceling forward\n", c->designator);
-		return -3;
+		return 0;                                        /* never reschedule: our reference is gone (AUTO_RELEASE) */
 	}
 
 	pbx_channel_lock(c->owner);
@@ -477,7 +477,7 @@ int sccp_pbx_cfwdnoanswer_cb(const void * data)
 	if(!forwarder || c->isHangingUp || pbx_check_hangup_locked(forwarder)) {
 		pbx_log(LOG_WARNING, "%s: The channel was already hungup. giving up.\n", c->designator);
 		pbx_channel_unref(forwarder);
-		return -4;
+		return 0;                                        /* never reschedule: our reference is gone (AUTO_RELEASE) */
 	}
 
 	boolean_t bypassCallForward = !sccp_strlen_zero(pbx_builtin_getvar_helper(forwarder, "BYPASS_CFWD"));
@@ -662,6 +662,8 @@ int sccp_pbx_remote_answer(constChannelPtr channel)
 		PBX_CHANNEL_TYPE * destination = NULL;
 		if(sccp_strlen_zero(destinationChannelName) || !iPbx.getChannelByName(destinationChannelName, &destination)) {
 			pbx_log(LOG_NOTICE, "%s: (%s) Could not retrieve channel for destination: %s", c->designator, __func__, destinationChannelName);
+			pbx_channel_unref(tmp_channel);
+			pbx_channel_unref(forwarder);
 			return -2;
 		}
 		/*
@@ -687,6 +689,7 @@ int sccp_pbx_remote_answer(constChannelPtr channel)
 					if(destination) {
 						pbx_channel_unref(destination);
 					}
+					pbx_channel_unref(forwarder);
 					res = -3;
 					break;
 				}

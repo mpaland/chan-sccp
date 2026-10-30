@@ -2342,6 +2342,26 @@ static void sccp_buttonconfig_destroy(sccp_buttonconfig_t *buttonconfig)
 
 
 /*!
+ * \brief Free the button template of a device, releasing the line references stored in it
+ * \param d SCCP Device
+ */
+void sccp_dev_freeButtonTemplate(devicePtr d)
+{
+	if (d && d->buttonTemplate) {
+		btnlist * btn = d->buttonTemplate;
+		for (int i = 0; i < StationMaxButtonTemplateSize; i++) {
+			if ((btn[i].type == SKINNY_BUTTONTYPE_LINE) && btn[i].ptr) {
+				sccp_line_t * tmp = btn[i].ptr; /* implicit cast without type change */
+				sccp_line_release(&tmp);                                        /* explicit release */
+				btn[i].ptr = NULL;
+			}
+		}
+		sccp_free(d->buttonTemplate);
+		d->buttonTemplate = NULL;
+	}
+}
+
+/*!
  * \brief Clean Device
  *
  *  clean up memory allocated by the device.
@@ -2362,7 +2382,6 @@ void _sccp_dev_clean(devicePtr device, boolean_t remove_from_global, boolean_t r
 	sccp_buttonconfig_t *config = NULL;
 	sccp_selectedchannel_t *selectedChannel = NULL;
 	sccp_channel_t *c = NULL;
-	int i = 0;
 
 	if(d) {
 		sccp_log((DEBUGCAT_CORE + DEBUGCAT_DEVICE)) (VERBOSE_PREFIX_1 "SCCP: Clean Device %s, remove from global:%s, restart_device:%s\n", d->id, remove_from_global ? "Yes" : "No", restart_device ? "Yes" : "No");
@@ -2464,19 +2483,7 @@ void _sccp_dev_clean(devicePtr device, boolean_t remove_from_global, boolean_t r
 		SCCP_LIST_UNLOCK(&d->selectedChannels);
 
 		/* release line references, refcounted in btnList */
-		if (d->buttonTemplate) {
-			btnlist *btn = d->buttonTemplate;
-
-			for (i = 0; i < StationMaxButtonTemplateSize; i++) {
-				if ((btn[i].type == SKINNY_BUTTONTYPE_LINE) && btn[i].ptr) {
-					sccp_line_t * tmp = btn[i].ptr; /* implicit cast without type change */
-					sccp_line_release(&tmp);
-					btn[i].ptr = NULL;
-				}
-			}
-			sccp_free(d->buttonTemplate);
-			d->buttonTemplate = NULL;
-		}
+		sccp_dev_freeButtonTemplate(d);
 
 		if (device->lineButtons.size) {
 			sccp_linedevice_deleteButtonsArray(d);

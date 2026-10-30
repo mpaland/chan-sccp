@@ -209,10 +209,12 @@ channelPtr sccp_channel_allocate(constLinePtr l, constDevicePtr device)
 	}
 	if (sccp_strlen_zero(refLine->name) || sccp_strlen_zero(refLine->context) || !pbx_context_find(refLine->context)) {
 		pbx_log(LOG_ERROR, "SCCP: line with empty name, empty context or non-existent context provided, aborting creation of new channel\n");
+		sccp_line_release(&refLine);                                        /* explicit release */
 		return NULL;
 	}
 	if (device && !device->session) {
 		pbx_log(LOG_ERROR, "SCCP: Tried to open channel on device %s without a session\n", device->id);
+		sccp_line_release(&refLine);                                        /* explicit release */
 		return NULL;
 	}
 
@@ -246,6 +248,7 @@ channelPtr sccp_channel_allocate(constLinePtr l, constDevicePtr device)
 			pbx_log(LOG_ERROR, "%s: No memory to allocate channel private data on line %s\n", l->id, l->name);
 			break;
 		}
+		*(struct sccp_private_channel_data **)&channel->privateData = private_data;                                        /* owned (and freed) by the channel destructor from here on */
 		
 		/* assign private_data default values */
 		private_data->microphone = TRUE;
@@ -257,7 +260,6 @@ channelPtr sccp_channel_allocate(constLinePtr l, constDevicePtr device)
 		}
 		
 		/* assigning immutable values */
-		*(struct sccp_private_channel_data **)&channel->privateData = private_data;
 		*(uint32_t *)&channel->callid = callid;
 		*(uint32_t *)&channel->passthrupartyid = callid ^ 0xFFFFFFFF;
 		*(sccp_line_t **)&channel->line = refLine;
@@ -329,14 +331,7 @@ channelPtr sccp_channel_allocate(constLinePtr l, constDevicePtr device)
 		return channel;
 	} while (0);
 
-	/* something went wrong, cleaning up */
-	if (private_data) {
-		if (private_data->callInfo) {
-			iCallInfo.Destructor(&private_data->callInfo);
-		}
-		SCCP_LIST_HEAD_DESTROY(&(private_data->cleanup_jobs));
-		sccp_free(private_data);
-	}
+	/* something went wrong, cleaning up (private_data is released by the channel destructor) */
 	if (channel) {
 		sccp_channel_release(&channel);							// explicit release
 	}
@@ -1569,7 +1564,9 @@ gcc_inline void sccp_channel_schedule_digittimeout(constChannelPtr channel, int 
 		} else {
 			iPbx.sched_replace_ref(&c->scheduler.digittimeout_id, timeout * 1000, sccp_pbx_sched_dial, c);
 		}
-		sccp_channel_release(&c);
+	}
+	if (c) {
+		sccp_channel_release(&c);                                        /* explicit release (the scheduler took its own reference) */
 	}
 }
 
@@ -1601,7 +1598,9 @@ gcc_inline void sccp_channel_schedule_cfwd_noanswer(constChannelPtr channel, int
 		if(c->scheduler.cfwd_noanswer_id == -1) {
 			iPbx.sched_add_ref(&c->scheduler.cfwd_noanswer_id, timeout * 1000, sccp_pbx_cfwdnoanswer_cb, c);
 		}
-		sccp_channel_release(&c);
+	}
+	if (c) {
+		sccp_channel_release(&c);                                        /* explicit release (the scheduler took its own reference) */
 	}
 }
 
@@ -1686,6 +1685,12 @@ channelPtr sccp_channel_getEmptyChannel(constLinePtr l, constDevicePtr d, channe
 	if(sccp_pbx_channel_allocate(channel, ids, parentChannel)) {
 		return channel;
 	}
+	/* the pbx channel could not be created: without an owner nobody will ever hang this channel up, so take it down here */
+	if (!channel->owner) {
+		sccp_line_removeChannel(channel->line, channel);
+		sccp_channel_clean(channel);
+	}
+	sccp_channel_release(&channel);                                        /* explicit release of the allocation reference */
 	return NULL;
 }
 
@@ -2382,7 +2387,7 @@ int __sccp_channel_destroy(const void * data)
 		sccp_rtp_destroy(channel);
 	}
 
-	if (channel->privateData->callInfo) {
+	if (channel->privateData && channel->privateData->callInfo) {
 		iCallInfo.Destructor(&channel->privateData->callInfo);
 	}
 
@@ -2400,8 +2405,10 @@ int __sccp_channel_destroy(const void * data)
 	/* destroy immutables, by casting away const */
 	sccp_free(*(char **)&channel->musicclass);
 	sccp_free(*(char **)&channel->designator);
-	SCCP_LIST_HEAD_DESTROY(&(channel->privateData->cleanup_jobs));
-	sccp_free(*(struct sccp_private_channel_data **)&channel->privateData);
+	if (channel->privateData) {
+		SCCP_LIST_HEAD_DESTROY(&(channel->privateData->cleanup_jobs));
+		sccp_free(*(struct sccp_private_channel_data **)&channel->privateData);
+	}
 	sccp_line_release((sccp_line_t **)&channel->line);
 	/* */
 
