@@ -56,7 +56,7 @@ Make sure you have the following installed on your system:
   - gettext
   - libssl-dev / openssl-devel
 - pbx:
-  - asterisk >= 20 (Asterisk 20, 21 and 22 are supported; older versions are not supported anymore)
+  - asterisk >= 20 (Asterisk 20, 21, 22 and 24 are supported; older versions are not supported anymore)
   - including source headers and debug symbols (asterisk-dev and asterisk-dbg / asterisk-devel and asterisk-debug-info)
   - chan_skinny module is prevented from loading in /etc/asterisk/modules.conf
 - standard posix compatible applications like sed, awk, tr

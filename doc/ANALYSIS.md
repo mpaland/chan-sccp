@@ -9,7 +9,7 @@ real phones, listed in section 5.
 The driver had not been maintained for three years and did not work on current Asterisk releases: no
 outbound audio on Asterisk >= 20.10 / 21 / 22, and no module load (or no compile) on 21/22. The goals were
 
-1. support Asterisk 20, 21, 22 and later only, with a single glue implementation;
+1. support Asterisk 20, 21, 22, 24 and later only, with a single glue implementation;
 2. integrate the meaningful open upstream pull requests;
 3. find and fix memory leaks, reference count errors, locking defects and lifetime bugs.
 
@@ -36,6 +36,26 @@ implementations alone were ~35k lines).
 | The `accept`/`close` members of `sccp_transport` collide with the `DEBUG_FD_LEAKS` macros in `asterisk.h`. | Compile error in DEBUG_FD_LEAKS builds (upstream #625). | Renamed `accept_connection`/`close_socket` (PR #626). `e4b47129`. |
 | `sccp_dev_starttone()` declaration/definition mismatch. | Hard error with `-Werror=enum-int-mismatch` (AST_DEVMODE). | Fixed (PR #626). `e4b47129`. |
 | ~60 configure probes for API details that varied between Asterisk 1.6 and 19; ~100 `#if` on version macros. | Dead code, probes that could never fire (e.g. `CS_AST_HAS_EVENT`), a broken `LOW_MEMORY` probe. | Probes replaced by one header sanity check plus the menuselect dependent ones; all conditionals removed. `44416825`, `da36fcdc`..`1076e983`. |
+
+### Asterisk 24.0.0-rc4
+
+Checked against the 24.0.0-rc4 source tree (`doc/asterisk-24-testing/`), compared with 22.11.0:
+
+- `include/asterisk/` has the same set of headers. Apart from documentation comments the differences are
+  `AMI_VERSION` ("11.0.0" -> "13.0.0", detected as Asterisk 24), one new function
+  `ast_taskprocessor_is_executing()`, the deprecation of `ast_moh_cleanup()` (now a no-op) and a rewritten
+  comment for `ast_frame_adjust_volume()` (the argument is a linear factor, not dB). chan-sccp uses none of
+  these three.
+- None of the 845 `ast_*`/`AST_*`/`stasis_*`/`ao2_*` identifiers used by the driver is missing from the 24
+  headers.
+- Core sources the driver depends on: `main/rtp_engine.c` (payload mapping) is unchanged;
+  `res/res_rtp_asterisk.c` only changes RTCP statistics; `main/channel.c` only internalises the music on
+  hold cleanup; `main/channel_internal_api.c` fills gaps in the channel fd vector with -1 (chan-sccp only
+  sets `AST_TIMING_FD` to -1); `main/extension_state.c` re-queries device state providers for hints that
+  are still `AST_DEVICE_INVALID`, which fixes the "hint stuck at Unavailable" regression of 22.11.0 and
+  benefits the sccp hint provider.
+- The driver compiles against the 24 headers with the CI flags with 0 errors and the same 15 pre-existing
+  warnings; `configure` reports "Building for Asterisk 24.0".
 
 Build layout now: `src/pbx_impl/ast/{ast.c, astwrap.c/.h, ast_announce.c/.h, define.h}` built into `libast.la`.
 `astwrap.h` carries `#error` for `ASTERISK_VERSION_MAJOR < 20`. `ASTERISK_VERSION_GROUP` (100+major) and
@@ -216,6 +236,9 @@ must keep.
 - `./configure --with-asterisk-version=18.9` exits 1 with "requires Asterisk 20 or newer".
 - `grep -rn 'ASTERISK_VERSION_\|ASTERISK_CONF_1_' src/` shows only the `astwrap.h` guard and the
   configure-provided defines.
+- Build against the Asterisk 24.0.0-rc4 public headers (staged with the `autoconfig.h`/`buildopts.h` of the
+  installed 22 development package, `--with-asterisk=<staging prefix>`): 0 errors, the same 15 warnings,
+  all 41 objects depend on the staged headers.
 
 ## 5. Needs runtime verification on real phones
 
@@ -249,5 +272,5 @@ SCCP phones before a release:
   prints empty expansions for these macros through `-E`, which is why the header text is read instead.
 - The tree is checked out with CRLF on Windows; build on Linux from a clone or with `core.autocrlf` unset,
   since autotools scripts do not tolerate CRLF.
-- `doc/asterisk-22-current/` is an untracked local copy of the Asterisk source used as API reference and is
-  listed in `.gitignore`.
+- `doc/asterisk-22-current/` and `doc/asterisk-24-testing/` are untracked local copies of the Asterisk source
+  used as API reference; `.gitignore` covers `/doc/asterisk-*`.

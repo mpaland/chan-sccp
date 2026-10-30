@@ -2,7 +2,8 @@ Version: v4.3.5_DEV
 ==========================
 
  - Asterisk support:
-   - Requires Asterisk >= 20 (Asterisk 20, 21 and 22). Support for Asterisk 11 to 19 has been removed.
+   - Requires Asterisk >= 20 (Asterisk 20, 21, 22 and 24; the build is verified against the 22.11.0 and
+     24.0.0-rc4 headers). Support for Asterisk 11 to 19 has been removed.
    - Single pbx glue implementation in src/pbx_impl/ast (astNNN directories and symlinks are gone)
    - configure detects the Asterisk major version from AMI_VERSION (asterisk/manager.h);
      --with-asterisk-version=MAJOR[.MINOR] overrides detection

@@ -1,6 +1,6 @@
 /.tmp
-# local copy of the Asterisk source tree used as API reference (see doc/ANALYSIS.md)
-/doc/asterisk-22-current/
+# local copies of Asterisk source trees used as API reference (see doc/ANALYSIS.md)
+/doc/asterisk-*
 /.hgignore
 /.hgtags
 /.project
