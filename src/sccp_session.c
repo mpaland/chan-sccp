@@ -104,7 +104,12 @@ sccp_servercontext_t * sccp_servercontext_create(struct sockaddr_storage * binda
 	context->stopListening = sccp_servercontext_stopListening;
 	context->sc.fd = -1;
 	context->accept_tid = AST_PTHREADT_NULL;
-	return sccp_servercontext_reload(context, bindaddr) ? context : NULL;
+	if (!sccp_servercontext_reload(context, bindaddr)) {
+		context->transport->destroy(1);
+		sccp_free(context);
+		return NULL;
+	}
+	return context;
 }
 
 int sccp_servercontext_stopListening(sccp_servercontext_t * context)
@@ -1014,7 +1019,7 @@ static void * accept_thread(void * data)
 			destroy_session(s);
 		}
 	}
-	context->transport->close_socket(&new_sc);
+	/* note: new_sc belongs to the last accepted session by now, it must not be closed here */
 	if(context->sc.fd > -1) {
 		sccp_log((DEBUGCAT_CORE))(VERBOSE_PREFIX_3 "Closing Listening Port:%d\n", context->sc.fd);
 		context->transport->close_socket(&context->sc);
@@ -1203,6 +1208,7 @@ int sccp_session_send2(constSessionPtr session, sccp_msg_t * msg)
 	uint8_t * bufAddr = NULL;
 
 	if (s && s->session_stop) {
+		sccp_free(msg);                                        /* send2 owns the message */
 		return -2;
 	}
 
@@ -1230,6 +1236,7 @@ int sccp_session_send2(constSessionPtr session, sccp_msg_t * msg)
 	if(msginfo) {
 		if(msginfo->messageId != msgid) {
 			pbx_log(LOG_ERROR, "%s: (session_send2) messageId %d (0x%x) unknown. matched:0x%x discarding message.\n", DEV_ID_LOG(s->device), msgid, msgid, msginfo->messageId);
+			sccp_free(msg);
 			return -4;
 		}
 		if(msginfo->type == SKINNY_MSGTYPE_REQUEST) {

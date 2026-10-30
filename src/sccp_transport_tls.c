@@ -210,11 +210,12 @@ static int tls_close(sccp_socket_connection_t * sc)
 {
 	// sccp_log(DEBUGCAT_SOCKET)(VERBOSE_PREFIX_1 "TLS Transport close...\n");
 	int res = 0;
-	if (sc->fd) {
+	if (sc->fd > -1) {
 		res = close(sc->fd);
 	}
 	if (sc->ssl) {
 		SSL_free(sc->ssl);
+		sc->ssl = NULL;
 	}
 	return res;
 }

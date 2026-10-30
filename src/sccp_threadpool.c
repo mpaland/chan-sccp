@@ -120,8 +120,6 @@ void sccp_threadpool_grow_locked(sccp_threadpool_t * tp_p, int amount)
 
 			pthread_attr_init(&attr);
 			pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-			pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
-			pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 			SCCP_LIST_INSERT_HEAD(&(tp_p->threads), tp_thread, list);
 			pbx_pthread_create(&(tp_thread->thread), &attr, sccp_threadpool_thread_do, (void *) tp_thread);
 			sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_3 "Created thread %d(%p) in pool \n", t, (void *) tp_thread->thread);
@@ -269,8 +267,8 @@ int sccp_threadpool_add_work(sccp_threadpool_t * tp_p, void *(*function_p) (void
 		sccp_threadpool_job_t * newJob = NULL;
 
 		if (!(newJob = (sccp_threadpool_job_t *) sccp_calloc(sizeof *newJob, 1))) {
-        		pbx_log(LOG_ERROR, SS_Memory_Allocation_Error, "SCCP");
-			exit(1);
+			pbx_log(LOG_ERROR, SS_Memory_Allocation_Error, "SCCP");
+			return 0;
 		}
 
 		/* add function and argument */
@@ -340,7 +338,16 @@ boolean_t sccp_threadpool_destroy(sccp_threadpool_t * tp_p)
 		SCCP_LIST_UNLOCK(&(tp_p->threads));
 	}
 
-	/* Dealloc */
+	/* Dealloc: release jobs that were never executed */
+	{
+		sccp_threadpool_job_t * job = NULL;
+		SCCP_LIST_LOCK(&(tp_p->jobs));
+		while ((job = SCCP_LIST_REMOVE_HEAD(&(tp_p->jobs), list))) {
+			pbx_log(LOG_WARNING, "SCCP: (threadpool_destroy) discarding unexecuted job %p\n", job);
+			sccp_free(job);
+		}
+		SCCP_LIST_UNLOCK(&(tp_p->jobs));
+	}
 	pbx_cond_destroy(&(tp_p->work));									/* Remove Condition */
 	pbx_cond_destroy(&(tp_p->exit));									/* Remove Condition */
 	SCCP_LIST_HEAD_DESTROY(&(tp_p->jobs));

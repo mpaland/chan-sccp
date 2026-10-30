@@ -1457,10 +1457,12 @@ boolean_t sccp_append_variable(PBX_VARIABLE_TYPE *params, const char *key, const
 				params = params->next;
 			}
 			params->next = newvar;
+			res = TRUE;
 		} else {
-			params = newvar;
+			/* nothing to append to: the caller would never see newvar, do not leak it */
+			pbx_log(LOG_ERROR, "SCCP: (append_variable) no variable list provided to append %s to\n", key);
+			pbx_variables_destroy(newvar);
 		}
-		res = TRUE;
 	} else {
 		pbx_log(LOG_ERROR, "SCCP: (append_variable) Error while creating newvar structure\n");
 	}
