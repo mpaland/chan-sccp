@@ -3038,10 +3038,14 @@ sccp_config_file_status_t sccp_config_getConfig(boolean_t force, const char * co
 	sccp_log(DEBUGCAT_CORE)(VERBOSE_PREFIX_3 "Config file '%s' loaded.\n", newfilename);
 	res = CONFIG_STATUS_FILE_OK;
 FUNC_EXIT:
-	if (GLOB(config_file_name)) {
-		sccp_free(GLOB(config_file_name));
+	{
+		/* newfilename may alias GLOB(config_file_name) (e.g. "sccp reload line"), so copy before freeing */
+		char * keep_filename = pbx_strdup(newfilename);
+		if (GLOB(config_file_name)) {
+			sccp_free(GLOB(config_file_name));
+		}
+		GLOB(config_file_name) = keep_filename;
 	}
-	GLOB(config_file_name) = pbx_strdup(newfilename);
 	return res;
 }
 
