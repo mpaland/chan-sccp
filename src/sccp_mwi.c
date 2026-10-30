@@ -172,6 +172,7 @@ static void removeSubscription(sccp_mailbox_t * mailbox, constLinePtr line)
 
 	do {
 		found_one = FALSE;
+		removed = NULL;
 		subscription_lock();
 		for(uint32_t idx = 0; idx < SCCP_VECTOR_SIZE(&subscriptions); idx++) {
 			mwi_subscription_t * subscription = SCCP_VECTOR_GET(&subscriptions, idx);
@@ -198,10 +199,10 @@ static void removeSubscription(sccp_mailbox_t * mailbox, constLinePtr line)
 static void removeAllSubscriptions(void)
 {
 	sccp_log((DEBUGCAT_MWI)) (VERBOSE_PREFIX_2 "SCCP: (mwi::removeAllSubscriptions)\n");
-	for (uint32_t idx = 0; idx < SCCP_VECTOR_SIZE(&subscriptions); idx++) {
-		mwi_subscription_t *subscription = SCCP_VECTOR_GET(&subscriptions, idx);
+	while (SCCP_VECTOR_SIZE(&subscriptions) > 0) {                                        /* always take element 0: REMOVE_UNORDERED moves the last element into the freed slot */
+		mwi_subscription_t *subscription = SCCP_VECTOR_GET(&subscriptions, 0);
+		SCCP_VECTOR_REMOVE_UNORDERED(&subscriptions, 0);
 		if (subscription) {
-			SCCP_VECTOR_REMOVE_UNORDERED(&subscriptions, idx);
 			pbxMailboxUnsubscribe(subscription);
 			sccp_line_release(&subscription->line);
 			sccp_free(subscription);

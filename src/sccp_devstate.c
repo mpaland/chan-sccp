@@ -92,6 +92,7 @@ void sccp_devstate_module_stop(void)
 			SCCP_LIST_LOCK(&deviceState->subscribers);
 			while ((subscriber = SCCP_LIST_REMOVE_HEAD(&deviceState->subscribers, list))) {
 				sccp_device_release(&subscriber->device);		/* explicit release */
+				sccp_free(subscriber);
 			}
 			SCCP_LIST_UNLOCK(&deviceState->subscribers);
 			sccp_devstate_setASTDB(deviceState);
@@ -129,6 +130,10 @@ static void parseButtonArgs(const char * args, feature_state_t * states)
 	while((arg = strsep(&_args, "|")) != NULL) {
 		unsigned short int state, rythm, color, icon, nextstate;
 		if(sscanf(arg, "%1hd%1hd%1hd%1hd%1hd", &state, &rythm, &color, &icon, &nextstate) == 5) {
+			if (state >= AST_DEVICE_TOTAL || nextstate >= AST_DEVICE_TOTAL) {
+				pbx_log(LOG_WARNING, "SCCP: (devstate::parseButtonArgs) state %hu/%hu out of range in '%s', skipping\n", state, nextstate, arg);
+				continue;
+			}
 			states[state].value.strct.rythm = rythm;
 			states[state].value.strct.color = color;
 			states[state].value.strct.icon = icon;
@@ -168,6 +173,7 @@ static void removeSubscriber(deviceState_t * deviceState, const sccp_device_t * 
 		if(subscriber->device == device) {
 			SCCP_LIST_REMOVE_CURRENT(list);
 			sccp_device_release(&subscriber->device); /* explicit release */
+			sccp_free(subscriber);
 		}
 	}
 	SCCP_LIST_TRAVERSE_SAFE_END

@@ -61,7 +61,7 @@
 #define pbx_channel_string2amaflag(_a) ast_channel_string2amaflag(_a)
 #define pbx_channel_amaflags2string(_a) ast_channel_amaflags2string(_a)
 #define pbx_event_subscribe(_a) _a = stasis_subscribe(_a)
-#define pbx_event_unsubscribe(_a) _a = stasis_unsubscribe(_a)
+#define pbx_event_unsubscribe(_a) _a = stasis_unsubscribe_and_join(_a)                                        /* wait for a running callback before the owner is freed; never call from inside the callback */
 #define pbx_bridge_destroy(_x, _y) ast_bridge_destroy(_x, _y)
 #define pbx_bridge_new(_a, _b, _c, _d, _e) ast_bridge_base_new(_a, _b, _c, _d, _e)
 #define pbx_bridge_change_state(_a, _b) ((_a)->state) = (_b)

@@ -592,7 +592,7 @@ static sccp_hint_list_t *sccp_hint_create(char *hint_exten, char *hint_context)
 
 	sccp_copy_string(hint->exten, hint_exten, sizeof(hint->exten));
 	sccp_copy_string(hint->context, hint_context, sizeof(hint->context));
-	sccp_copy_string(hint->hint_dialplan, hint_dialplan, sizeof(hint_dialplan));
+	sccp_copy_string(hint->hint_dialplan, hint_dialplan, sizeof(hint->hint_dialplan));
 
 	/* subscripbe to the hint */
 	hint->stateid = pbx_extension_state_add(hint->context, hint->exten, sccp_hint_devstate_cb, hint);
