@@ -4,369 +4,84 @@ dnl CREATED BY: Created by Diederik de Groot
 dnl LICENSE: This program is free software and may be modified and distributed under the terms of the GNU Public License version 3.
 dnl          See the LICENSE file at the top of the source tree.
 
+dnl Determine the Asterisk major version and refuse anything older than Asterisk 20.
+dnl
+dnl Asterisk does not export its version number in a header (asterisk/version.h is a stub since 1.8), but
+dnl AMI_VERSION in asterisk/manager.h is bumped with every major release: AMI major = Asterisk major - 11
+dnl (Asterisk 20 -> "9.0.0", 21 -> "10.0.0", 22 -> "11.0.0"). The pkg-config version is used as a cross check
+dnl and to pick up the minor version. --with-asterisk-version=MAJOR[.MINOR] overrides detection.
+dnl
+dnl Defines: ASTERISK_VERSION_MAJOR (e.g. 22), ASTERISK_VERSION_GROUP (100 + major, e.g. 122, kept for legacy
+dnl          comparisons) and ASTERISK_VERSION_NUMBER (major * 100 + minor, e.g. 12205).
 AC_DEFUN([AST_GET_VERSION], [
 	CONFIGURE_PART([Checking Asterisk Version:])
-	REALTIME_USEABLE=1
-	version_found=0
-	
-	AC_ARG_WITH(asterisk_version,
-	AC_HELP_STRING([--with-asterisk-version[=PATH]], [specify the asterisk_version manually (fmt=major.minor)]), [ac_cv_use_asterisk_version="${withval}"], [ac_cv_use_asterisk_version="no"])
-	AS_IF([test "_${ac_cv_use_asterisk_version}" != "_no"], [
-		major=${ac_cv_use_asterisk_version%.*}
-		minor=${ac_cv_use_asterisk_version#*.}
-		combined=`printf "1%d%02d" $major $minor`
+	AC_ARG_WITH([asterisk-version],
+		[AS_HELP_STRING([--with-asterisk-version=MAJOR[[.MINOR]]], [override the detected Asterisk version (e.g. 22 or 22.5)])],
+		[cs_ast_version_override="${withval}"],
+		[cs_ast_version_override="no"])
 
-		ASTERISK_VERSION_NUMBER="${combined}"
-		ASTERISK_VER_GROUP="1${major}"
-		ASTERISK_REPOS_LOCATION="TRUNK"
+	cs_ast_header_include="
+#undef PACKAGE
+#undef PACKAGE_BUGREPORT
+#undef PACKAGE_NAME
+#undef PACKAGE_STRING
+#undef PACKAGE_TARNAME
+#undef PACKAGE_VERSION
+#undef VERSION
+#define AST_MODULE_SELF_SYM __internal_chan_sccp_la_self
+#define AST_MODULE \"chan_sccp\"
+#include <asterisk.h>
+"
+	ASTERISK_VERSION_MAJOR=""
+	ASTERISK_VERSION_MINOR=""
 
-		case "${ASTERISK_VER_GROUP}" in
-			102) AC_DEFINE([ASTERISK_CONF_1_2], [1], [Defined ASTERISK_CONF_1_2]);;
-			104) AC_DEFINE([ASTERISK_CONF_1_4], [1], [Defined ASTERISK_CONF_1_4]);;
-			106) AC_DEFINE([ASTERISK_CONF_1_6], [1], [Defined ASTERISK_CONF_1_6]);;
-			108) AC_DEFINE([ASTERISK_CONF_1_8], [1], [Defined ASTERISK_CONF_1_8]);;
-			110) AC_DEFINE([ASTERISK_CONF_1_10], [1], [Defined ASTERISK_CONF_1_10]);;
-			111) AC_DEFINE([ASTERISK_CONF_1_11], [1], [Defined ASTERISK_CONF_1_11]);;
-			112) AC_DEFINE([ASTERISK_CONF_1_12], [1], [Defined ASTERISK_CONF_1_12]);;
-			113) AC_DEFINE([ASTERISK_CONF_1_13], [1], [Defined ASTERISK_CONF_1_13]);;
-			114) AC_DEFINE([ASTERISK_CONF_1_14], [1], [Defined ASTERISK_CONF_1_14]);;
-			115) AC_DEFINE([ASTERISK_CONF_1_15], [1], [Defined ASTERISK_CONF_1_15]);;
-			116) AC_DEFINE([ASTERISK_CONF_1_16], [1], [Defined ASTERISK_CONF_1_16]);;
-			117) AC_DEFINE([ASTERISK_CONF_1_17], [1], [Defined ASTERISK_CONF_1_17]);;
-			118) AC_DEFINE([ASTERISK_CONF_1_18], [1], [Defined ASTERISK_CONF_1_18]);;
-			119) AC_DEFINE([ASTERISK_CONF_1_19], [1], [Defined ASTERISK_CONF_1_19]);;
-			*)
-				AC_DEFINE([ASTERISK_CONF], [0], [NOT Defined ASTERISK_CONF !!])
-				ASTERISK_INCOMPATIBLE=yes;;
-		esac 
-		AC_DEFINE_UNQUOTED([ASTERISK_VERSION_NUMBER], ${ASTERISK_VERSION_NUMBER}, [ASTERISK Version Number])
-		AC_DEFINE_UNQUOTED([ASTERISK_VERSION_GROUP], ${ASTERISK_VER_GROUP}, [ASTERISK Version Group])
-		AC_DEFINE_UNQUOTED([ASTERISK_REPOS_LOCATION], ${ASTERISK_REPOS_LOCATION},[ASTERISK Source Location])
-		
-		version_found=1
-		AC_MSG_RESULT([Found 'Asterisk Version ${ASTERISK_VERSION_NUMBER}'.])
+	dnl minor version from pkg-config (Debian style "1:22.5.2~dfsg+..." -> 22 / 5)
+	cs_pc_version=`echo "${PBX_VERSION}" | ${SED} -e 's/^[[0-9]]*://' -e 's/[[^0-9.]].*$//'`
+	cs_pc_major=`echo "${cs_pc_version}" | cut -d. -f1`
+	cs_pc_minor=`echo "${cs_pc_version}" | cut -s -d. -f2`
+
+	AS_IF([test "x${cs_ast_version_override}" != "xno" && test "x${cs_ast_version_override}" != "xyes"], [
+		ASTERISK_VERSION_MAJOR=`echo "${cs_ast_version_override}" | cut -d. -f1`
+		ASTERISK_VERSION_MINOR=`echo "${cs_ast_version_override}" | cut -s -d. -f2`
+		AC_MSG_NOTICE([Asterisk version ${ASTERISK_VERSION_MAJOR}.${ASTERISK_VERSION_MINOR:-0} given on the command line])
 	], [
-		AC_CHECK_HEADER([asterisk/version.h],[
-			AC_MSG_CHECKING([version in asterisk/version.h])
-			AC_COMPILE_IFELSE(
-				[AC_LANG_PROGRAM(
-					[
-						#define AST_MODULE_SELF_SYM "__internal_chan_sccp_la_self"
-						#define AST_MODULE "chan_sccp"
-						#include <asterisk/version.h>
-					],[
-						const char *test_src = ASTERISK_VERSION;
-					]
-				)],[
-				AC_MSG_RESULT(processing...)
-				pbx_ver=$(eval "$ac_cpp conftest.$ac_ext" 2>/dev/null | $EGREP test_src |$EGREP -o '\".*\"')
-
-				# process tgz, branch, trunk
-				if echo $pbx_ver|grep -q "\"SVN-branch"; then
-					ASTERISK_REPOS_LOCATION=BRANCH
-					pbx_ver=${pbx_ver:12}						# remove head
-				elif echo $pbx_ver|grep -q "\"SVN-trunk"; then
-					ASTERISK_REPOS_LOCATION=TRUNK
-					pbx_ver=${pbx_ver:11}						# remove head
-					if test "${pbx_ver:0:1}" == "r" ; then
-						pbx_ver="1.10.1"					# default trunk without number
-					fi
-				else
-					ASTERISK_REPOS_LOCATION=TGZ
-				fi
-
-				# remove from pbx_ver
-				# remove from pbx_ver
-				pbx_ver=${pbx_ver%%-*}							# remove tail
-				#pbx_ver=${pbx_ver//\"/}						# remove '"'
-				pbx_ver=`echo ${pbx_ver} | sed 's/"//g'`
-
-				# process version number
-				for x in "1.2" "1.4" "1.6" "1.8" "1.10" "10" "11" "12" "13" "14" "15" "16" "17" "18" "19"; do
-					if test $version_found == 0; then
-						if echo $pbx_ver|grep -q "$x"; then
-							if test ${#x} -gt 3; then		# 1.10
-								ASTERISK_VER_GROUP="`echo $x|sed 's/\.//g'`"
-							elif test ${#x} -lt 3; then		# 1.10
-								ASTERISK_VER_GROUP="110"
-							else
-								ASTERISK_VER_GROUP="`echo $x|sed 's/\./0/g'`"
-							fi
-							AC_SUBST([ASTERISK_VER_GROUP])
-							
-							if test "$ASTERISK_VER_GROUP" == "102"; then						# switch off realtime for 1.2
-								REALTIME_USEABLE=0
-							fi
-							
-							#ASTERISK_MINOR_VER=${pbx_ver/$x\./}							# remove leading '1.x.'
-							ASTERISK_MINOR_VER=`echo $pbx_ver|sed "s/^$x.\([0-9]*\)\(.*\)/\1/g"`			# remove leading and trailing .*
-							#ASTERISK_MINOR_VER1=${ASTERISK_MINOR_VER%%.*}						# remove trailing '.*'
-							#if test ${#ASTERISK_MINOR_VER1} -gt 1; then
-								#ASTERISK_VERSION_NUMBER="${ASTERISK_VER_GROUP}${ASTERISK_MINOR_VER1}"		# add only third version part
-							#else
-								#ASTERISK_VERSION_NUMBER="${ASTERISK_VER_GROUP}0${ASTERISK_MINOR_VER1}"		# add only third version part
-							#fi
-							#ASTERISK_STR_VER="${x}.${ASTERISK_MINOR_VER1}"
-
-							#ASTERISK_MINOR_VER=${pbx_ver/$x\./}							# remove leading '1.x.'
-							ASTERISK_MINOR_VER=`echo $pbx_ver|sed "s/^$x.\([0-9]*\)\(.*\)/\1/g"`			# remove leading and trailing .*
-							ASTERISK_MINOR_VER1=${ASTERISK_MINOR_VER%%.*}						# remove trailing '.*'
-							#if test ${#ASTERISK_MINOR_VER1} -gt 1; then
-								#ASTERISK_VERSION_NUMBER="${ASTERISK_VER_GROUP}${ASTERISK_MINOR_VER1}"		# add only third version part
-							#else
-								ASTERISK_VERSION_NUMBER="${ASTERISK_VER_GROUP}0${ASTERISK_MINOR_VER1}"		# add only third version part
-							#fi
-
-							#ASTERISK_STR_VER="${x}.${ASTERISK_MINOR_VER1}"
-							
-							version_found=1
-							AC_MSG_RESULT([Found 'Asterisk Version ${ASTERISK_VERSION_NUMBER} ($x)'])
-
-							AC_DEFINE_UNQUOTED([ASTERISK_VERSION_NUMBER],`echo ${ASTERISK_VERSION_NUMBER}`,[ASTERISK Version Number])
-							AC_SUBST([ASTERISK_VERSION_NUMBER])
-							AC_DEFINE_UNQUOTED([ASTERISK_VERSION_GROUP],`echo ${ASTERISK_VER_GROUP}`,[ASTERISK Version Group])
-							AC_SUBST([ASTERISK_VER_GROUP])
-							AC_DEFINE_UNQUOTED([ASTERISK_REPOS_LOCATION],`echo ${ASTERISK_REPOS_LOCATION}`,[ASTERISK Source Location])
-							AC_SUBST([ASTERISK_REPOS_LOCATION])
-
-							case "${ASTERISK_VER_GROUP}" in
-								102) AC_DEFINE([ASTERISK_CONF_1_2], [1], [Defined ASTERISK_CONF_1_2]);;
-								104) AC_DEFINE([ASTERISK_CONF_1_4], [1], [Defined ASTERISK_CONF_1_4]);;
-								106) AC_DEFINE([ASTERISK_CONF_1_6], [1], [Defined ASTERISK_CONF_1_6]);;
-								108) AC_DEFINE([ASTERISK_CONF_1_8], [1], [Defined ASTERISK_CONF_1_8]);;
-								110) AC_DEFINE([ASTERISK_CONF_1_10], [1], [Defined ASTERISK_CONF_1_10]);;
-								111) AC_DEFINE([ASTERISK_CONF_1_11], [1], [Defined ASTERISK_CONF_1_11]);;
-								112) AC_DEFINE([ASTERISK_CONF_1_12], [1], [Defined ASTERISK_CONF_1_12]);;
-								113) AC_DEFINE([ASTERISK_CONF_1_13], [1], [Defined ASTERISK_CONF_1_13]);;
-								114) AC_DEFINE([ASTERISK_CONF_1_14], [1], [Defined ASTERISK_CONF_1_14]);;
-								115) AC_DEFINE([ASTERISK_CONF_1_15], [1], [Defined ASTERISK_CONF_1_15]);;
-								116) AC_DEFINE([ASTERISK_CONF_1_16], [1], [Defined ASTERISK_CONF_1_16]);;
-								117) AC_DEFINE([ASTERISK_CONF_1_17], [1], [Defined ASTERISK_CONF_1_17]);;
-								118) AC_DEFINE([ASTERISK_CONF_1_18], [1], [Defined ASTERISK_CONF_1_18]);;
-								119) AC_DEFINE([ASTERISK_CONF_1_19], [1], [Defined ASTERISK_CONF_1_19]);;
-								*)
-									AC_DEFINE([ASTERISK_CONF], [0], [NOT Defined ASTERISK_CONF !!])
-									ASTERISK_INCOMPATIBLE=yes;;
-							esac 
-
-							if [ test ${ASTERISK_VER_GROUP} -lt ${MIN_ASTERISK_VERSION} ]; then
-								echo ""
-								CONFIGURE_PART([Asterisk Version ${ASTERISK_VER} Not Supported])
-								echo ""
-								echo "This version of chan-sccp-b only has support for Asterisk 1.6.x and above."
-								echo ""
-								echo "Please install a higher version of asterisk"
-								echo ""
-								echo ""
-								exit 255
-							fi
-							if [ test ${ASTERISK_VER_GROUP} -gt ${MAX_ASTERISK_VERSION} ]; then
-								echo ""
-								CONFIGURE_PART([Asterisk Version ${ASTERISK_VER} Not Supported])
-								echo ""
-								echo "This version of chan-sccp-b only has support for Asterisk 1.12.x and below."
-								echo ""
-								echo "Please install a lower version of asterisk"
-								echo ""
-								echo ""
-								exit 255
-							fi
-						fi
-					fi 
-				done
-				if test $version_found == 0; then
-					echo ""
-					echo ""
-					echo "PBX branch version could not be determined"
-					echo "==================================="
-					echo "Either install asterisk and asterisk-devel packages using your package manager."
-					echo "If you compiled asterisk manually, make sure you also run `make install-headers` so chan-sccp can find them."
-					echo "Or specify the location where asterisk can be found, using ./configure --with-asterisk=[path]"
-					exit 255
-				fi
-			],[
-				AC_MSG_RESULT('ASTERISK_VERSION could not be established)
-			])
-		], [
-			HEADER_INCLUDE="
-	#define HAVE_ARPA_INET_H 1
-	#define AST_MODULE_SELF_SYM __internal_chan_sccp_la_self
-	#define AST_MODULE "chan_sccp"
-	#include <asterisk.h>
-	"
-			AC_CHECK_HEADER([asterisk/ast_version.h],
-			[
-				AC_EGREP_CPP([8.0.0], [
-					$HEADER_INCLUDE
-					#include <asterisk/manager.h>
-					#if defined AMI_VERSION
-					  AMI_VERSION
-					#endif
-				],
-				[
-					ASTERISK_VER_GROUP=119
-					ASTERISK_VERSION_NUMBER=11900
-					ASTERISK_REPOS_LOCATION=TRUNK
-
-					AC_DEFINE([ASTERISK_CONF_1_19], [1], [Defined ASTERISK_CONF_1_19])
-					AC_DEFINE([ASTERISK_VERSION_NUMBER], [11900], [ASTERISK Version Number])
-					AC_DEFINE([ASTERISK_VERSION_GROUP], [119], [ASTERISK Version Group])
-					AC_DEFINE([ASTERISK_REPOS_LOCATION], ["TRUNK"],[ASTERISK Source Location])
-					
-					version_found=1
-					AC_MSG_RESULT([Found 'Asterisk Version ${ASTERISK_VERSION_NUMBER}'.])
-				],
-				[
-					AC_CHECK_HEADER([asterisk/res_audiosocket.h],
-					[
-						ASTERISK_VER_GROUP=118
-						ASTERISK_VERSION_NUMBER=11800
-						ASTERISK_REPOS_LOCATION=TRUNK
-
-						AC_DEFINE([ASTERISK_CONF_1_18], [1], [Defined ASTERISK_CONF_1_18])
-						AC_DEFINE([ASTERISK_VERSION_NUMBER], [11800], [ASTERISK Version Number])
-						AC_DEFINE([ASTERISK_VERSION_GROUP], [118], [ASTERISK Version Group])
-						AC_DEFINE([ASTERISK_REPOS_LOCATION], ["TRUNK"],[ASTERISK Source Location])
-						
-						version_found=1
-						AC_MSG_RESULT([Found 'Asterisk Version ${ASTERISK_VERSION_NUMBER}'.])
-					],
-					[
-						AC_CHECK_HEADER([asterisk/iostream.h],
-						[
-							AC_EGREP_CPP([enhances], [
-								$HEADER_INCLUDE
-								#include <asterisk/module.h>
-							],[
-								AC_EGREP_CPP([ast_bridges\(void\)], [
-									$HEADER_INCLUDE
-									#include <asterisk/module.h>
-									#include <asterisk/iostream.h>
-									#include <asterisk/bridge.h>
-								], 
-								[
-									ASTERISK_VER_GROUP=117
-									ASTERISK_VERSION_NUMBER=11700
-									ASTERISK_REPOS_LOCATION=TRUNK
-
-									AC_DEFINE([ASTERISK_CONF_1_17], [1], [Defined ASTERISK_CONF_1_17])
-									AC_DEFINE([ASTERISK_VERSION_NUMBER], [11700], [ASTERISK Version Number])
-									AC_DEFINE([ASTERISK_VERSION_GROUP], [117], [ASTERISK Version Group])
-									AC_DEFINE([ASTERISK_REPOS_LOCATION], ["branch-17"],[ASTERISK Source Location])
-									
-									version_found=1
-									AC_MSG_RESULT([Found 'Asterisk Version ${ASTERISK_VERSION_NUMBER}'.])
-								],
-								[
-									ASTERISK_VER_GROUP=116
-									ASTERISK_VERSION_NUMBER=11600
-									ASTERISK_REPOS_LOCATION=TRUNK
-
-									AC_DEFINE([ASTERISK_CONF_1_16], [1], [Defined ASTERISK_CONF_1_16])
-									AC_DEFINE([ASTERISK_VERSION_NUMBER], [11600], [ASTERISK Version Number])
-									AC_DEFINE([ASTERISK_VERSION_GROUP], [116], [ASTERISK Version Group])
-									AC_DEFINE([ASTERISK_REPOS_LOCATION], ["branch-16"],[ASTERISK Source Location])
-									
-									version_found=1
-									AC_MSG_RESULT([Found 'Asterisk Version ${ASTERISK_VERSION_NUMBER}'.])
-								])
-							],[
-								ASTERISK_VER_GROUP=115
-								ASTERISK_VERSION_NUMBER=11500
-								ASTERISK_REPOS_LOCATION=TRUNK
-
-								AC_DEFINE([ASTERISK_CONF_1_15], [1], [Defined ASTERISK_CONF_1_15])
-								AC_DEFINE([ASTERISK_VERSION_NUMBER], [11500], [ASTERISK Version Number])
-								AC_DEFINE([ASTERISK_VERSION_GROUP], [115], [ASTERISK Version Group])
-								AC_DEFINE([ASTERISK_REPOS_LOCATION], ["branch-15"],[ASTERISK Source Location])
-								
-								version_found=1
-								AC_MSG_RESULT([Found 'Asterisk Version ${ASTERISK_VERSION_NUMBER}'.])
-							])
-						],
-						[
-							AC_CHECK_HEADER([asterisk/media_cache.h],
-							[
-								ASTERISK_VER_GROUP=114
-								ASTERISK_VERSION_NUMBER=11400
-								ASTERISK_REPOS_LOCATION=TRUNK
-
-								AC_DEFINE([ASTERISK_CONF_1_14], [1], [Defined ASTERISK_CONF_1_14])
-								AC_DEFINE([ASTERISK_VERSION_NUMBER], [11400], [ASTERISK Version Number])
-								AC_DEFINE([ASTERISK_VERSION_GROUP], [114], [ASTERISK Version Group])
-								AC_DEFINE([ASTERISK_REPOS_LOCATION], ["branch-14"],[ASTERISK Source Location])
-								
-								version_found=1
-								AC_MSG_RESULT([Found 'Asterisk Version ${ASTERISK_VERSION_NUMBER}'.])
-							],
-							[
-								AC_CHECK_HEADER([asterisk/format_cache.h],
-								[
-									ASTERISK_VER_GROUP=113
-									ASTERISK_VERSION_NUMBER=11300
-									ASTERISK_REPOS_LOCATION=TRUNK
-
-									AC_DEFINE([ASTERISK_CONF_1_13], [1], [Defined ASTERISK_CONF_1_13])
-									AC_DEFINE([ASTERISK_VERSION_NUMBER], [11300], [ASTERISK Version Number])
-									AC_DEFINE([ASTERISK_VERSION_GROUP], [113], [ASTERISK Version Group])
-									AC_DEFINE([ASTERISK_REPOS_LOCATION], ["branch-14"],[ASTERISK Source Location])
-									
-									version_found=1
-									AC_MSG_RESULT([Found 'Asterisk Version ${ASTERISK_VERSION_NUMBER}'.])
-								],
-								[
-									AC_CHECK_HEADER([asterisk/uuid.h],
-									[
-										ASTERISK_VER_GROUP=112
-										ASTERISK_VERSION_NUMBER=11200
-										ASTERISK_REPOS_LOCATION=TRUNK
-
-										AC_DEFINE([ASTERISK_CONF_1_12], [1], [Defined ASTERISK_CONF_1_12])
-										AC_DEFINE([ASTERISK_VERSION_NUMBER], [11200], [ASTERISK Version Number])
-										AC_DEFINE([ASTERISK_VERSION_GROUP], [112], [ASTERISK Version Group])
-										AC_DEFINE([ASTERISK_REPOS_LOCATION], ["branch-12"],[ASTERISK Source Location])
-										
-										version_found=1
-										AC_MSG_RESULT([done])
-									],[
-										ASTERISK_VER_GROUP=111
-										ASTERISK_VERSION_NUMBER=11100
-										ASTERISK_REPOS_LOCATION=BRANCH
-
-										AC_DEFINE([ASTERISK_CONF_1_11], [1], [Defined ASTERISK_CONF_1_11])
-										AC_DEFINE([ASTERISK_VERSION_NUMBER], [11100], [ASTERISK Version Number])
-										AC_DEFINE([ASTERISK_VERSION_GROUP], [111], [ASTERISK Version Group])
-										AC_DEFINE([ASTERISK_REPOS_LOCATION], ["branch-11"],[ASTERISK Source Location])
-										
-										version_found=1
-										AC_MSG_RESULT([done])
-										AC_MSG_RESULT([Found 'Asterisk Version 11'])
-									])
-								])
-							])
-						], [$HEADER_INCLUDE])
-					], [$HEADER_INCLUDE])
-				], [$HEADER_INCLUDE])
-			],[
-				AC_MSG_RESULT(['ASTERISK_VERSION could not be established'])
-			], [$HEADER_INCLUDE])
+		AC_CHECK_HEADER([asterisk/ast_version.h], [], [AC_MSG_ERROR([asterisk/ast_version.h not found. chan-sccp needs the development headers of Asterisk >= 20 (asterisk-dev / asterisk-devel, or 'make install-headers').])], [${cs_ast_header_include}])
+		AC_MSG_CHECKING([Asterisk major version (AMI_VERSION in asterisk/manager.h)])
+		cat > conftest.$ac_ext <<_ACEOF
+${cs_ast_header_include}
+#include <asterisk/manager.h>
+cs_ami_version_marker AMI_VERSION
+_ACEOF
+		cs_ami_major=`(eval "$ac_cpp conftest.$ac_ext") 2>/dev/null | ${SED} -n 's/^cs_ami_version_marker[[ 	]]*"\([[0-9]][[0-9]]*\)\..*$/\1/p' | head -n1`
+		rm -f conftest.$ac_ext conftest.$ac_objext
+		AS_IF([test -z "${cs_ami_major}"], [
+			AC_MSG_RESULT([unknown])
+			AC_MSG_ERROR([could not determine the Asterisk version from asterisk/manager.h. Use --with-asterisk-version=MAJOR.MINOR to specify it.])
+		])
+		ASTERISK_VERSION_MAJOR=`expr ${cs_ami_major} + 11`
+		ASTERISK_VERSION_MINOR="${cs_pc_minor}"
+		AC_MSG_RESULT([${ASTERISK_VERSION_MAJOR} (AMI ${cs_ami_major})])
+		AS_IF([test -n "${cs_pc_major}" && test "x${cs_pc_major}" != "x${ASTERISK_VERSION_MAJOR}"], [
+			AC_MSG_WARN([pkg-config reports Asterisk ${cs_pc_major} but the headers belong to Asterisk ${ASTERISK_VERSION_MAJOR}; trusting the headers. Use --with-asterisk-version to override.])
 		])
 	])
-	
-	if test $version_found == 0; then
-		echo ""
-		echo ""
-		echo "PBX branch version could not be determined"
-		echo "==================================="
-		echo "Either install asterisk and asterisk-devel packages using your package manager."
-		echo "If you compiled asterisk manually, make sure you also run `make install-headers` so chan-sccp can find them."
-		echo "Or specify the location where asterisk can be found, using ./configure --with-asterisk=[path]"
-		echo ""
-		echo "=================================== config.log"
-		cat config.log 
-		echo "=================================== config.log"
-		exit 255
-	fi
+	ASTERISK_VERSION_MINOR="${ASTERISK_VERSION_MINOR:-0}"
+
+	AS_IF([test "${ASTERISK_VERSION_MAJOR}" -lt 20 2>/dev/null || test -z "${ASTERISK_VERSION_MAJOR}"], [
+		AC_MSG_ERROR([Asterisk ${ASTERISK_VERSION_MAJOR} detected. This version of chan-sccp requires Asterisk 20 or newer (20, 21, 22, ...). For older Asterisk releases use chan-sccp v4.3.x.])
+	])
+
+	ASTERISK_VERSION_GROUP=`expr 100 + ${ASTERISK_VERSION_MAJOR}`
+	ASTERISK_VERSION_NUMBER=`expr ${ASTERISK_VERSION_MAJOR} \* 100 + ${ASTERISK_VERSION_MINOR}`
+	ASTERISK_VER_GROUP="${ASTERISK_VERSION_GROUP}"
+
+	AC_DEFINE_UNQUOTED([ASTERISK_VERSION_MAJOR], [${ASTERISK_VERSION_MAJOR}], [Asterisk major version (e.g. 22)])
+	AC_DEFINE_UNQUOTED([ASTERISK_VERSION_GROUP], [${ASTERISK_VERSION_GROUP}], [Asterisk version group: 100 + major (e.g. 122)])
+	AC_DEFINE_UNQUOTED([ASTERISK_VERSION_NUMBER], [${ASTERISK_VERSION_NUMBER}], [Asterisk version number: major * 100 + minor (e.g. 12205)])
+	AC_SUBST([ASTERISK_VERSION_MAJOR])
+	AC_SUBST([ASTERISK_VERSION_GROUP])
+	AC_SUBST([ASTERISK_VERSION_NUMBER])
+	AC_MSG_NOTICE([Building for Asterisk ${ASTERISK_VERSION_MAJOR}.${ASTERISK_VERSION_MINOR}])
 ])
 
 dnl Find Asterisk Header Files

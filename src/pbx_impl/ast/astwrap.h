@@ -9,6 +9,9 @@
 #pragma once
 
 #include "config.h"
+#if !defined(ASTERISK_VERSION_MAJOR) || ASTERISK_VERSION_MAJOR < 20
+#	error "chan-sccp requires Asterisk 20 or newer"
+#endif
 #include <asterisk/format_compatibility.h>
 
 #include "pbx_impl/ast/ast_announce.h"
