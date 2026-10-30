@@ -28,7 +28,7 @@ typedef struct {
 #if defined(HAVE_LIBXSLT) && defined(HAVE_LIBEXSLT_EXSLT_H)
 	//	int (*const setBaseDir)(const char * const baseDir);
 	//	const char * const (*const getBaseDir)(void);
-	boolean_t (* const applyStyleSheet)(xmlDoc * const doc, PBX_VARIABLE_TYPE * pbx_params);
+	boolean_t (* const applyStyleSheet)(xmlDoc ** doc, PBX_VARIABLE_TYPE * pbx_params);	/*!< on success *doc is replaced by the transformed document */
 	boolean_t (* const applyStyleSheetByName)(xmlDoc * const doc, const char * const styleSheetFileName, PBX_VARIABLE_TYPE * pbx_params, char ** result);
 #endif
 

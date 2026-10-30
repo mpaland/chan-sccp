@@ -714,7 +714,7 @@ static boolean_t sccp_webservice_xmltest(const char * const uri, PBX_VARIABLE_TY
 				iXML.setRootElement(doc, templ);
 				sccp_free(stylesheetFilename);
 			}
-			if (!iXML.applyStyleSheet(doc, params)) {
+			if (!iXML.applyStyleSheet(&doc, params)) {
 				pbx_log(LOG_ERROR, "Applying Stylesheet failed\n");
 				res = FALSE;
 			}

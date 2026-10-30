@@ -135,9 +135,11 @@ static uint convertPbxVar2XsltParams(PBX_VARIABLE_TYPE * pbx_params, const char 
 	return nbparams;
 }
 
-/* rework to easy unit testing, TO MUCH INTEGRATION */
-/* return allocated string */
-static boolean_t applyStyleSheet(xmlDoc * const doc, PBX_VARIABLE_TYPE * pbx_params)
+/*!
+ * rief apply the stylesheet referenced by the xml-stylesheet processing instruction of *doc
+ * On success the original document is freed and *doc points to the transformed document.
+ */
+static boolean_t applyStyleSheet(xmlDoc ** doc, PBX_VARIABLE_TYPE * pbx_params)
 {
 	boolean_t    res        = FALSE;
 	const char * params[17] = { 0 };
@@ -149,25 +151,23 @@ static boolean_t applyStyleSheet(xmlDoc * const doc, PBX_VARIABLE_TYPE * pbx_par
 	params[nbparams++] = "en";
 
 	/* process xinclude elements. */
-	if (xmlXIncludeProcess(doc) < 0) {
-		// xmlFreeDoc(doc);
+	if (!doc || !*doc || xmlXIncludeProcess(*doc) < 0) {
 		return res;
 	}
 
-	xsltStylesheetPtr xslt = xsltLoadStylesheetPI(doc);
+	xsltStylesheetPtr xslt = xsltLoadStylesheetPI(*doc);
 	if (xslt) {
 		// xmlSubstituteEntitiesDefault(1);						/* coverity: CID 200164 (#1 of 1): unsafe_xml_parse_config (UNSAFE_XML_PARSE_CONFIG)unsafe_xml_parse_config: Passing 1 (value: 1)
 		// to xmlSubstituteEntitiesDefault(int) will allow entity substitution which can allow malicious entities to be substituted.*/
 		xmlLoadExtDtdDefaultValue = 1;
 		nbparams                  = convertPbxVar2XsltParams(pbx_params, params, nbparams);                                        // still needed ?
-		xmlDocPtr newdoc          = xsltApplyStylesheet(xslt, doc, params);
-		if (newdoc) {                                        // switch xml doc with newdoc which got the stylesheet applied, free original xml doc
-			xmlFreeDoc(doc);
-			*(xmlDoc **)&doc = newdoc;
-			res              = TRUE;
+		xmlDocPtr newdoc          = xsltApplyStylesheet(xslt, *doc, params);
+		if (newdoc) {                                        // hand the transformed document to the caller, free the original
+			xmlFreeDoc(*doc);
+			*doc = newdoc;
+			res  = TRUE;
 		}
 		xsltFreeStylesheet(xslt);
-		xsltCleanupGlobals();
 	}
 
 	return res;
@@ -192,8 +192,12 @@ static boolean_t applyStyleSheetByName(xmlDoc * const doc, const char * const st
 	}
 
 	if (styleSheetFilename) {
-		xsltStylesheet * const xslt   = xsltParseStylesheetFile((const xmlChar *)styleSheetFilename);
-		xmlDoc * const         newdoc = xsltApplyStylesheet(xslt, doc, params);
+		xsltStylesheet * const xslt = xsltParseStylesheetFile((const xmlChar *)styleSheetFilename);
+		if (!xslt) {
+			pbx_log(LOG_ERROR, "SCCP: (applyStyleSheetByName) could not parse stylesheet %s\n", styleSheetFilename);
+			return res;
+		}
+		xmlDoc * const newdoc = xsltApplyStylesheet(xslt, doc, params);
 		if (newdoc) {                                        // switch xml doc with newdoc which got the stylesheet applied, free original xml doc
 			int output_len = 0;
 			xmlDocDumpFormatMemoryEnc(newdoc, (xmlChar **)result, &output_len, "UTF-8", 1);
@@ -203,7 +207,6 @@ static boolean_t applyStyleSheetByName(xmlDoc * const doc, const char * const st
 		}
 		// sccp_log(DEBUGCAT_WEBSERVICE)(VERBOSE_PREFIX_3 "applied Stylesheet doc: '%s'\n", dump(doc, TRUE));
 		xsltFreeStylesheet(xslt);
-		xsltCleanupGlobals();
 	}
 
 	return res;
@@ -216,8 +219,8 @@ static void destroyDoc(xmlDoc * const * doc)
 		xmlFreeDoc(*doc);
 		*(xmlDoc **)doc = NULL;
 	}
-	xmlCleanupParser();
-	xmlMemoryDump();
+	/* libxml/libxslt global cleanup (xmlCleanupParser, xsltCleanupGlobals, xmlMemoryDump) is only safe once no other
+	 * thread uses the library anymore; it is done in destroy_xml() at module unload, not per document. */
 }
 
 /* private functions */
