@@ -1,6 +1,7 @@
 ## Welcome to Chan_SCCP
 
 [![CI](https://github.com/mpaland/chan-sccp/actions/workflows/ccpp.yml/badge.svg?branch=develop)](https://github.com/mpaland/chan-sccp/actions/workflows/ccpp.yml)
+[![CodeQL](https://github.com/mpaland/chan-sccp/actions/workflows/codeql-analysis.yml/badge.svg?branch=develop)](https://github.com/mpaland/chan-sccp/actions/workflows/codeql-analysis.yml)
 [![Asterisk](https://img.shields.io/badge/Asterisk-20%20%7C%2021%20%7C%2022%20%7C%2024-orange?logo=asterisk)](https://www.asterisk.org/)
 [![Last commit](https://img.shields.io/github/last-commit/mpaland/chan-sccp/develop?logo=git)](https://github.com/mpaland/chan-sccp/commits/develop)
 [![License](https://img.shields.io/badge/license-GPL-blue)](LICENSE)

@@ -9,75 +9,59 @@ on:
   schedule:
     - cron: '0 3 * * 2'
 
+permissions:
+  contents: read
+
 jobs:
   analyze:
-    name: Analyze
+    name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
 
     strategy:
       fail-fast: false
       matrix:
-        # Override automatic language detection by changing the below list
-        # Supported options are ['csharp', 'cpp', 'go', 'java', 'javascript', 'python']
-        language: ['cpp', 'python']
-        # Learn more...
-        # https://docs.github.com/en/github/finding-security-vulnerabilities-and-errors-in-your-code/configuring-code-scanning#overriding-automatic-language-detection
+        # c-cpp: the channel driver; python: the helper scripts in contrib/ and tools/
+        language: ['c-cpp', 'python']
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2
-      with:
-        # We must fetch at least the immediate parents so that if this is
-        # a pull request then we can checkout the head.
-        fetch-depth: 2
-
-    # If this run was triggered by a pull request event, then checkout
-    # the head of the pull request instead of the merge commit.
-    #- run: git checkout HEAD^2
-    #  if: ${{ github.event_name == 'pull_request' }}
+      uses: actions/checkout@v6
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v1
+      uses: github/codeql-action/init@v4
       with:
         languages: ${{ matrix.language }}
         # If you wish to specify custom queries, you can do so here or in a config file.
-        # By default, queries listed here will override any specified in a config file. 
+        # By default, queries listed here will override any specified in a config file.
         # Prefix the list here with "+" to use these queries and those in the config file.
         # queries: ./path/to/local/query, your-org/your-repo/queries@main
 
     - name: Install dependencies
+      if: matrix.language == 'c-cpp'
       # chan-sccp requires Asterisk >= 20 (the asterisk-dev package of ubuntu-latest)
       run: |
-        #sudo apt-get install -qq libblocksruntime0 libblocksruntime-dev libpj2 libpjmedia2 libpjnath2 libpjproject-dev libpjsip2 libpjsua2 asterisk asterisk-dev asterisk-config asterisk-modules binutils.dev libc6-dev gettext  autoconf automake m4 autotools-dev libltdl-dev
         sudo apt-get update
-        sudo apt-get install -qq libblocksruntime0 libblocksruntime-dev asterisk asterisk-dev asterisk-config asterisk-modules binutils.dev libc6-dev gettext  autoconf automake m4 autotools-dev libltdl-dev
+        sudo apt-get install -y asterisk asterisk-dev asterisk-config automake autoconf libtool pkg-config gawk binutils-dev libxml2-dev libxslt1-dev xsltproc libssl-dev
 
-    # Autobuild attempts to build any compiled languages  (C/C++, C#, or Java).
-    # If this step fails, then you should remove it and run the build manually (see below)
-    #- name: Autobuild
-    #  uses: github/codeql-action/autobuild@v1
-
-    # ℹ️ Command-line programs to run using the OS shell.
-    # 📚 https://git.io/JvXDl
-
-    # ✏️ If the Autobuild fails above, remove it and uncomment the following three lines
-    #    and modify them (or add more) to build your code if your project
-    #    uses a compiled language
-
-    - name: Update configure script
+    # The build is done manually (not with codeql-action/autobuild) so that the configure flags are explicit.
+    - name: Regenerate configure script
+      if: matrix.language == 'c-cpp'
       run: autoreconf -fi
 
     - name: Configure
-      run: ./configure --enable-video --enable-conference --enable-distributed-devicestate --enable-advanced-functions --with-hash-size=3001
-    #  run: ./configure --enable-video --enable-conference --enable-distributed-devicestate --enable-advanced-functions --enable-experimental-xml --with-hash-size=3001
+      if: matrix.language == 'c-cpp'
+      run: ./configure --enable-video --enable-conference --enable-distributed-devicestate --enable-advanced-functions --enable-experimental-xml --with-hash-size=3001
 
     - name: Build
-      run: make -j4
-        
-    #- run: |
-    #   make bootstrap
-    #   make release
+      if: matrix.language == 'c-cpp'
+      run: make -j"$(nproc)"
 
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v1
+      uses: github/codeql-action/analyze@v4
+      with:
+        category: "/language:${{ matrix.language }}"

@@ -1,24 +1,32 @@
 name: CI
 
-on: [push]
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
-    
+
     steps:
-    - uses: actions/checkout@v1
-    - name: Update apt
-      run: sudo apt update
-    - name: Install Dependencies
+    - uses: actions/checkout@v6
+
+    - name: Install dependencies
       # chan-sccp requires Asterisk >= 20 (the asterisk-dev package of ubuntu-latest)
-      #run: sudo apt install asterisk asterisk-dev asterisk-config asterisk-tests asterisk-testsuite asttest automake autoconf libtool gawk libxml2-dev libxslt1-dev xsltproc libssl-dev 
-      run: sudo apt install asterisk asterisk-dev asterisk-config automake autoconf libtool gawk libxml2-dev libxslt1-dev xsltproc libssl-dev 
-    - name: configure
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y asterisk asterisk-dev asterisk-config automake autoconf libtool pkg-config gawk libxml2-dev libxslt1-dev xsltproc libssl-dev
+
+    - name: Configure
+      # the committed configure script is used as is (no bootstrap), like an end user would
       run: ./configure --enable-conference --enable-devdoc --with-hash-size=3001 --enable-experimental-xml --enable-video
-    - name: make
-      run: make -j4
+
+    - name: Build
+      run: make -j"$(nproc)"
+
 #    - name: make check
 #      run: make check
 #    - name: make distcheck
