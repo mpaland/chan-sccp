@@ -7,8 +7,8 @@
 
 include 		$(top_srcdir)/src/Makefile.inc.am
 
-SUBDIRS			= pbx_impl $(PBX_COND_SUBDIR) $(PBXVER_COND_SUBDIR) $(PBXVER_COND_ANNOUNCE_SUBDIR) .
-DIST_SUBDIRS		= pbx_impl pbx_impl/ast pbx_impl/ast106 pbx_impl/ast108 pbx_impl/ast110 pbx_impl/ast111 pbx_impl/ast112 pbx_impl/ast113 pbx_impl/ast114 pbx_impl/ast115 pbx_impl/ast116 pbx_impl/ast117 pbx_impl/ast118 pbx_impl/ast_announce .
+SUBDIRS			= pbx_impl/ast .
+DIST_SUBDIRS		= pbx_impl/ast .
 EXTRA_DIST 		= sccp_enum.in sccp_config_entries.hh
 BUILT_SOURCES           = revision.h sccp_enum.h sccp_enum.c
 CLEANFILES              = revision.h sccp_enum.h sccp_enum.c stamp-g1
@@ -57,7 +57,7 @@ noinst_HEADERS		= chan_sccp.h			sccp_actions.h			sccp_cli.h			sccp_devstate.h			
 			  revision.h			sccp_channel.h			sccp_device.h			sccp_event.h			\
 			  sccp_labels.h			sccp_protocol.h			sccp_enum.h			sccp_codec.h			\
 			  define.h			sccp_netsock.h			sccp_xml.h			sccp_webservice.h		\
-			  sccp_utils.h			sccp_featureParkingLot.h	sccp_transport.h
+			  sccp_utils.h			sccp_featureParkingLot.h	sccp_transport.h		pbx_impl/pbx_impl.h
 
 libsccp_la_SOURCES	= sccp_callinfo.c 		sccp_channel.c			sccp_device.c			sccp_debug.c			\
 			  sccp_indicate.c 		sccp_pbx.c 			sccp_session.c			sccp_threadpool.c		\
@@ -76,7 +76,7 @@ libsccp_la_CFLAGS       = $(AM_CFLAGS)
 libsccp_la_LDFLAGS	= $(AM_LDFLAGS)
 libsccp_la_CXXFLAGS	= $(AM_CXXFLAGS)
 
-chan_sccp_la_LIBADD	=  libsccp.la pbx_impl/libpbximpl.la $(PBX_COND_LIBADD) $(PBXVER_COND_LIBADD) $(PBXVER_COND_ANNOUNCE_LIBADD)
+chan_sccp_la_LIBADD	= libsccp.la pbx_impl/ast/libast.la
 chan_sccp_la_DEPENDENCIES = $(chan_sccp_la_LIBADD)
 chan_sccp_la_CFLAGS     = $(AM_CFLAGS)
 chan_sccp_la_LDFLAGS	= $(LIBS) $(AM_LDFLAGS) $(PBX_LDFLAGS) $(PTHREAD_LIBS) $(EVENT_LIBS) $(LIBEXSLT_LIBS) $(LIBCURL_LIBS) $(EVENT_LIBS) $(LIBBFD) $(LIBEXECINFO) $(LTLIBICONV)

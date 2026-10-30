@@ -51,10 +51,6 @@ typedef struct _PbxInterface {
 	const struct ast_pbx *(*const getChannelPbx) (const sccp_channel_t *channel);
 	const char *(*const getChannelContext) (constChannelPtr channel);
 	void (*const setChannelContext) (const sccp_channel_t *channel, const char *context);
-	const char *(*const getChannelMacroExten) (constChannelPtr channel);
-	void (*const setChannelMacroExten) (const sccp_channel_t *channel, const char *exten);
-	const char *(*const getChannelMacroContext) (constChannelPtr channel);
-	void (*const setChannelMacroContext) (const sccp_channel_t *channel, const char *context);
 	const char *(*const getChannelCallForward) (constChannelPtr channel);
 	void (*const setChannelCallForward) (const sccp_channel_t *channel, const char *fwdnum);
 

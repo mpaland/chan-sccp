@@ -6,8 +6,6 @@ dnl NOTE: Process this file with autoconf to produce a configure script.
 AC_PREREQ([2.64])
 AC_INIT([Chan_SCCP],m4_esyscmd([cat .version |tr -d '\n']),[https://github.com/chan-sccp/chan-sccp/issues],[Chan_SCCP])
 
-MIN_ASTERISK_VERSION=106
-MAX_ASTERISK_VERSION=113
 
 AC_CONFIG_AUX_DIR([autoconf])
 
@@ -119,8 +117,7 @@ AC_CONFIG_COMMANDS([.revision],
 AC_CONFIG_COMMANDS([src/sccp_enum.h],
 	output=`cd ${ac_abs_top_builddir}/src/;awk -f "${ac_abs_top_srcdir}/tools/gen_sccp_enum.awk" < ${ac_abs_top_srcdir}/src/sccp_enum.in &>/dev/null`
 )
-AC_CONFIG_FILES([Makefile doc/Makefile src/Makefile src/pbx_impl/Makefile src/pbx_impl/ast/Makefile src/pbx_impl/ast_announce/Makefile src/pbx_impl/ast${ASTERISK_VER_GROUP}/Makefile contrib/gen_sccpconf/Makefile])
-AST_SET_PBX_AMCONDITIONALS
+AC_CONFIG_FILES([Makefile doc/Makefile src/Makefile src/pbx_impl/ast/Makefile contrib/gen_sccpconf/Makefile])
 
 VERSION="`echo ${SCCP_VERSION}_${SCCP_BRANCH}`"
 PACKAGE_STRING="`echo Chan_SCCP_${VERSION}`"

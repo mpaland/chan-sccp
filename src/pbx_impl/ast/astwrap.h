@@ -1,5 +1,5 @@
 /*!
- * \file        ast112.h
+ * \file        ast113.h
  * \brief       SCCP PBX Asterisk Header
  * \author      Marcello Ceshia
  * \author      Diederik de Groot <ddegroot [at] users.sourceforge.net>
@@ -9,7 +9,9 @@
 #pragma once
 
 #include "config.h"
-#include "pbx_impl/ast_announce/ast_announce.h"
+#include <asterisk/format_compatibility.h>
+
+#include "pbx_impl/ast/ast_announce.h"
 
 #undef pbx_channel_ref
 #define pbx_channel_ref ast_channel_ref
@@ -21,10 +23,11 @@
 #define PBX_EVENT_SUBSCRIPTION struct stasis_subscription
 
 typedef struct ast_format_cap ast_format_t;
-int skinny_codecs2pbx_codec_pref(const skinny_codec_t * const codecs, struct ast_codec_pref *astCodecPref);
+
+//int skinny_codecs2pbx_codec_pref(skinny_codec_t * skinny_codecs, struct ast_codec_pref *astCodecPref);
 int sccp_wrapper_asterisk_set_rtp_peer(PBX_CHANNEL_TYPE * ast, PBX_RTP_TYPE * rtp, PBX_RTP_TYPE * vrtp, PBX_RTP_TYPE * trtp, int codecs, int nat_active);
 const char *pbx_getformatname(const struct ast_format *format);
-char *pbx_getformatname_multiple(char *buf, size_t size, struct ast_format_cap *format);
+const char *pbx_getformatname_multiple(char *buf, size_t size, struct ast_format_cap *format);
 
 /* Redefinitions for asterisk-trunk, need to be sorted  */
 #define pbx_channel_name(x) ast_channel_name(x)
@@ -43,8 +46,6 @@ char *pbx_getformatname_multiple(char *buf, size_t size, struct ast_format_cap *
 #undef pbx_channel_nativeformats
 #undef pbx_channel_exten
 #undef pbx_channel_priority
-#undef pbx_channel_macroexten
-#undef pbx_channel_macrocontext
 #undef pbx_channel_dialcontext
 #undef pbx_channel_callgroup
 #undef pbx_channel_masq
@@ -88,8 +89,6 @@ char *pbx_getformatname_multiple(char *buf, size_t size, struct ast_format_cap *
 #define pbx_channel_nativeformats(_a) ast_channel_nativeformats(_a)
 #define pbx_channel_exten(_a) ast_channel_exten(_a)
 #define pbx_channel_priority(_a) ast_channel_priority(_a)
-#define pbx_channel_macroexten(_a) ast_channel_macroexten(_a)
-#define pbx_channel_macrocontext(_a) ast_channel_macrocontext(_a)
 #define pbx_channel_dialcontext(_a) ast_channel_dialcontext(_a)
 #define pbx_channel_callgroup(_a) ast_channel_callgroup(_a)
 #define pbx_channel_masq(_a) ast_channel_masq(_a)
@@ -117,7 +116,7 @@ char *pbx_getformatname_multiple(char *buf, size_t size, struct ast_format_cap *
 #define pbx_bridge_destroy(_x, _y) ast_bridge_destroy(_x, _y)
 #define pbx_bridge_new(_a, _b, _c, _d, _e) ast_bridge_base_new(_a, _b, _c, _d, _e)
 #define AST_BRIDGE_CHANNEL_STATE_WAIT BRIDGE_CHANNEL_STATE_WAIT
-#define pbx_bridge_change_state(_a, _b) (_a->state) = _b
+#define pbx_bridge_change_state(_a, _b) ((_a)->state) = (_b)
 
 int pbx_manager_register(const char *action, int authority, int (*func) (struct mansession * s, const struct message * m), const char *synopsis, const char *description);
 
@@ -133,15 +132,14 @@ int pbx_manager_register(const char *action, int authority, int (*func) (struct 
 #define OLDCONST												// new function used with const
 
 #ifndef DOXYGEN_SHOULD_SKIP_THIS
-#	define CLI_AMI_OUTPUT(fd, s, ...)                        \
-		({                                                \
-			if (NULL != (s)) {                        \
-				astman_append ((s), __VA_ARGS__); \
-				local_line_total++;               \
-			} else {                                  \
-				ast_cli ((fd), __VA_ARGS__);      \
-			}                                         \
-		})
+#define CLI_AMI_OUTPUT(fd, s, ...) ({ 										\
+	if (NULL != (s)) {											\
+		astman_append((s), __VA_ARGS__);								\
+		local_line_total++;										\
+	} else {												\
+		ast_cli((fd), __VA_ARGS__);									\
+	}													\
+})
 
 #	define CLI_AMI_OUTPUT_PARAM(param, width, fmt, ...)                                                                                                                                                                    \
 		({                                                                                                                                                                                                              \
@@ -179,19 +177,19 @@ int pbx_manager_register(const char *action, int authority, int (*func) (struct 
 			}                                                                                                                                                                                                       \
 		})
 
-#	define _CLI_AMI_RETURN_ERROR(fd, s, m, line, fmt, ...)                                 \
-		({                                                                              \
-			if (NULL != (s)) {                                                      \
-				char tmp_##line[101];                                           \
-				snprintf (tmp_##line, sizeof (tmp_##line), (fmt), __VA_ARGS__); \
-				astman_send_error ((s), (m), tmp_##line);                       \
-				local_line_total++;                                             \
-			} else {                                                                \
-				ast_cli ((fd), "SCCP CLI ERROR: " fmt, __VA_ARGS__);            \
-			}                                                                       \
-			return RESULT_FAILURE;                                                  \
+#	define _CLI_AMI_RETURN_ERROR(fd, s, m, line, fmt, ...)                                                                                                                                                                 \
+		({                                                                                                                                                                                                              \
+			if (NULL != (s)) {                                                                                                                                                                                      \
+				char tmp_##line[101];                                                                                                                                                                           \
+				snprintf(tmp_##line, sizeof(tmp_##line), (fmt), __VA_ARGS__);                                                                                                                                   \
+				astman_send_error((s), (m), tmp_##line);                                                                                                                                                        \
+				local_line_total++;                                                                                                                                                                             \
+			} else {                                                                                                                                                                                                \
+				ast_cli((fd), "SCCP CLI ERROR: " fmt, __VA_ARGS__);                                                                                                                                             \
+			}                                                                                                                                                                                                       \
+			return RESULT_FAILURE;                                                                                                                                                                                  \
 		})
-#	define CLI_AMI_RETURN_ERROR(fd, s, m, fmt, ...) _CLI_AMI_RETURN_ERROR ((fd), (s), (m), __LINE__, fmt, __VA_ARGS__)
+#	define CLI_AMI_RETURN_ERROR(fd, s, m, fmt, ...) _CLI_AMI_RETURN_ERROR((fd), (s), (m), __LINE__, fmt, __VA_ARGS__)
 
 // CLI_ENTRY
 //   param1=registration_name
@@ -217,18 +215,18 @@ int pbx_manager_register(const char *action, int authority, int (*func) (struct 
 		if (!pbx_strlen_zero(id)) {									\
 			snprintf(idtext, sizeof(idtext), "ActionID: %s\r\n", id);				\
 		}												\
-		if (_EVENTLIST == TRUE) {									\
+		if ((_EVENTLIST) == TRUE) {									\
 			astman_send_listack(s, m, AMI_COMMAND " list will follow", "start");			\
 		}												\
 		if (RESULT_SUCCESS==_CALLED_FUNCTION(-1, &totals, s, m, ARRAY_LEN(arguments), arguments)) {	\
-			if (_EVENTLIST == TRUE) {								\
+			if ((_EVENTLIST) == TRUE) {								\
 				astman_append(s,								\
 				"Event: " AMI_COMMAND "Complete\r\n"						\
 				"EventList: Complete\r\n"							\
 				"ListItems: %d\r\n"								\
 				"ListTableItems: %d\r\n"							\
 				"%s"										\
-				"\r\n", totals.lines, totals.tables, idtext);  				\
+				"\r\n", totals.lines, totals.tables, idtext);  					\
 			} else {										\
 				astman_append(s, "\r\n");							\
 			}											\
@@ -251,7 +249,7 @@ int pbx_manager_register(const char *action, int authority, int (*func) (struct 
 		if (cmd == CLI_GENERATE) {									\
         		uint8_t completer;									\
 			for (completer=0; completer<ARRAY_LEN(cli_complete); completer++) {			\
-				if ((unsigned)a->pos == (completer + ARRAY_LEN(cli_command) - 1) || _COMPLETER_REPEAT ) {\
+				if ((unsigned)a->pos == (completer + ARRAY_LEN(cli_command) - 1) || (_COMPLETER_REPEAT) ) {\
 					return sccp_exec_completer(cli_complete[completer], (char *)a->line, (char *)a->word, a->pos, a->n);\
 				}										\
 			}											\
@@ -270,7 +268,7 @@ int pbx_manager_register(const char *action, int authority, int (*func) (struct 
                         m.hdrcount++;                                        					\
                 }												\
                 int result = (_CALLED_FUNCTION)(a->fd, NULL, NULL, &m, a->argc, (char **) a->argv);		\
-                for (int x = 0; x < (int)ARRAY_LEN(cli_ami_params) && x < a->argc; x++) {			\
+		for(int x = 0; (int)ARRAY_LEN(cli_ami_params) && x < a->argc; x++) { 				\
 			sccp_free(m.headers[x]);								\
 		}												\
 		switch (result) {										\
@@ -294,7 +292,7 @@ int pbx_manager_register(const char *action, int authority, int (*func) (struct 
 		if (cmd == CLI_GENERATE) {									\
                         uint8_t completer;									\
 			for (completer=0; completer<ARRAY_LEN(cli_complete); completer++) {			\
-				if ((unsigned)a->pos == (completer + ARRAY_LEN(cli_command) -1) || _COMPLETER_REPEAT ) {\
+				if ((unsigned)a->pos == (completer + ARRAY_LEN(cli_command) -1) || (_COMPLETER_REPEAT) ) {\
 					return sccp_exec_completer(cli_complete[completer], (char *)a->line, (char *)a->word, a->pos, a->n);\
 				}										\
 			}											\
@@ -303,7 +301,7 @@ int pbx_manager_register(const char *action, int authority, int (*func) (struct 
 		if (a->argc < (int)(ARRAY_LEN(cli_command)-1)) {						\
 			return CLI_SHOWUSAGE;									\
 		}												\
-		switch (_CALLED_FUNCTION(a->fd, a->argc, (char **) a->argv)) {					\
+		switch ((_CALLED_FUNCTION)(a->fd, a->argc, (char **) a->argv)) {				\
 			case RESULT_SUCCESS: return CLI_SUCCESS;						\
 			case RESULT_FAILURE: return CLI_FAILURE;						\
 			case RESULT_SHOWUSAGE: return CLI_SHOWUSAGE;						\

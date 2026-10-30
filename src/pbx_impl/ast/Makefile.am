@@ -8,8 +8,8 @@
 include 		$(top_srcdir)/src/Makefile.inc.am
 
 noinst_LTLIBRARIES	= libast.la
-noinst_HEADERS		= define.h ast.h include_asterisk_autoconfig.h
+noinst_HEADERS		= define.h ast.h astwrap.h ast_announce.h include_asterisk_autoconfig.h
 
-libast_la_SOURCES	= ast.c
+libast_la_SOURCES	= ast.c astwrap.c ast_announce.c
 libast_la_CFLAGS	= $(AM_CFLAGS)
 libast_la_LDFLAGS	= $(AM_LDFLAGS)

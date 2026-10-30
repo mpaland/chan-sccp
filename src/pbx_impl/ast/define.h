@@ -425,8 +425,6 @@ typedef struct pbx_event_sub pbx_event_subscription_t;
 #define pbx_channel_nativeformats(_a) (_a)->nativeformats
 #define pbx_channel_exten(_a) (_a)->exten
 #define pbx_channel_priority(_a) (_a)->priority
-#define pbx_channel_macroexten(_a) (_a)->macroexten
-#define pbx_channel_macrocontext(_a) (_a)->macrocontext
 #define pbx_channel_dialcontext(_a) (_a)->dialcontext
 #define pbx_channel_callgroup(_a) (_a)->callgroup
 #define pbx_channel_masq(_a) (_a)->masq
