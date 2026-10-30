@@ -18,18 +18,8 @@ SCCP_FILE_VERSION(__FILE__, "");
 #include "sccp_linedevice.h"
 #include "sccp_utils.h"
 
-#if CS_AST_HAS_EVENT
-#	include <asterisk/event.h>
-#elif HAVE_PBX_STASIS_H
 #	include <asterisk/stasis.h>
-#endif
-#ifdef HAVE_PBX_MWI_H				// ast_mwi_state_type
 #	include <asterisk/mwi.h>
-#else
-#	ifdef HAVE_PBX_APP_H                                        // ast_mwi_state_type
-#		include <asterisk/app.h>
-#	endif
-#endif
 #include <asterisk/cli.h>
 
 pbx_mutex_t subscriptions_lock;
@@ -40,11 +30,7 @@ pbx_mutex_t subscriptions_lock;
 typedef struct subscription {
 	sccp_mailbox_t *mailbox;
 	constLinePtr line;
-#if MWI_USE_EVENT
 	pbx_event_subscription_t *pbx_subscription;
-#else
-	int sched;
-#endif
 } mwi_subscription_t;
 SCCP_VECTOR(sccp_subscription_vector, mwi_subscription_t *) subscriptions;
 
@@ -54,79 +40,6 @@ void NotifyLine(constLinePtr line, int newmsgs, int oldmsgs);
 /* =======================
  * Pbx Event CallBacks
  * ======================= */
-#if defined(CS_AST_HAS_EVENT)
-static void pbxMailboxGetCached(mwi_subscription_t *subscription)
-{
-	sccp_log((DEBUGCAT_MWI)) (VERBOSE_PREFIX_1 "%s: (mwi::%s) uniqueid:%s\n",
-		(subscription->line)->name, __PRETTY_FUNCTION__, (subscription->mailbox)->uniqueid);
-
-	// split uniqueid
-	char *context, *mbox = NULL;
-	mbox = context = pbx_strdupa((subscription->mailbox)->uniqueid);
-	strsep(&context, "@");
-	if (sccp_strlen_zero(context)) {
-		context = "default";
-	}
-
-	RAII(pbx_event_t *, event, NULL, pbx_event_destroy);
-	event = pbx_event_get_cached(	AST_EVENT_MWI,
-					AST_EVENT_IE_MAILBOX, AST_EVENT_IE_PLTYPE_STR, mbox,
-					AST_EVENT_IE_CONTEXT, AST_EVENT_IE_PLTYPE_STR, context,
-					AST_EVENT_IE_END);
-
-	if (event) {
-		int newmsgs = pbx_event_get_ie_uint(event, AST_EVENT_IE_NEWMSGS);
-		int oldmsgs = pbx_event_get_ie_uint(event, AST_EVENT_IE_OLDMSGS);
-		NotifyLine(subscription->line, newmsgs, oldmsgs);
-	}
-}
-static void pbx_mwi_event(const pbx_event_t *event, void *data)
-{
-	mwi_subscription_t *subscription = (mwi_subscription_t *)data;
-	if (!subscription || !subscription->line || !event) {
-		pbx_log(LOG_ERROR, "SCCP: MWI Event skipped (%p, %p)\n", subscription, event);
-		return;
-	}
-	sccp_log((DEBUGCAT_MWI)) (VERBOSE_PREFIX_1 "%s: (mwi::%s) uniqueid:%s, event:%p\n", 
-		(subscription->line)->name, __PRETTY_FUNCTION__, (subscription->mailbox)->uniqueid, event);
-
-	int newmsgs = pbx_event_get_ie_uint(event, AST_EVENT_IE_NEWMSGS);
-	int oldmsgs = pbx_event_get_ie_uint(event, AST_EVENT_IE_OLDMSGS);
-	NotifyLine(subscription->line, newmsgs, oldmsgs);
-}
-static pbx_event_subscription_t *pbxMailboxSubscribe(mwi_subscription_t *subscription)
-{
-	sccp_log((DEBUGCAT_MWI)) (VERBOSE_PREFIX_1 "%s: (mwi::%s) uniqueid:%s\n",
-		(subscription->line)->name, __PRETTY_FUNCTION__, (subscription->mailbox)->uniqueid);
-
-	pbx_event_subscription_t *pbx_subscription = NULL;
-	
-	// split uniqueid
-	char *context, *mbox = NULL;
-	mbox = context = pbx_strdupa((subscription->mailbox)->uniqueid);
-	strsep(&context, "@");
-	if (sccp_strlen_zero(context)) {
-		context = "default";
-	}
-
-#if ASTERISK_VERSION_NUMBER >= 10800
-	pbx_subscription = pbx_event_subscribe(AST_EVENT_MWI, pbx_mwi_event, "mailbox subscription", subscription, AST_EVENT_IE_MAILBOX, AST_EVENT_IE_PLTYPE_STR, mbox, AST_EVENT_IE_CONTEXT, AST_EVENT_IE_PLTYPE_STR, context, AST_EVENT_IE_NEWMSGS, AST_EVENT_IE_PLTYPE_EXISTS, AST_EVENT_IE_END);
-#else
-	pbx_subscription = pbx_event_subscribe(AST_EVENT_MWI, pbx_mwi_event, subscription, AST_EVENT_IE_MAILBOX, AST_EVENT_IE_PLTYPE_STR, mbox, AST_EVENT_IE_CONTEXT, AST_EVENT_IE_PLTYPE_STR, context, AST_EVENT_IE_END);
-#endif
-	if (!pbx_subscription) {
-		pbx_log(LOG_ERROR, "SCCP: PBX MWI event could not be subscribed to for mailbox %s\n", (subscription->mailbox)->uniqueid);
-	}
-	pbxMailboxGetCached(subscription);
-	return pbx_subscription;
-}
-static void pbxMailboxUnsubscribe(mwi_subscription_t *subscription)
-{
-	if(subscription->pbx_subscription) {
-		pbx_event_unsubscribe(subscription->pbx_subscription);
-	}
-}
-#elif defined(CS_AST_HAS_STASIS)
 static void pbxMailboxGetCached(mwi_subscription_t *subscription)
 {
 	sccp_log((DEBUGCAT_MWI)) (VERBOSE_PREFIX_1 "%s: (mwi::%s) uniqueid:%s\n",
@@ -162,20 +75,7 @@ static pbx_event_subscription_t * pbxMailboxSubscribe(mwi_subscription_t *subscr
 	sccp_log((DEBUGCAT_MWI)) (VERBOSE_PREFIX_1 "%s: (mwi::%s) uniqueid:%s\n",
 		(subscription->line)->name, __PRETTY_FUNCTION__, (subscription->mailbox)->uniqueid);
 
-#	if ASTERISK_VERSION_GROUP >= 117
 	pbx_subscription = (pbx_event_subscription_t *)pbx_mwi_subscribe_pool(subscription->mailbox->uniqueid, pbx_mwi_event, subscription);
-#	else
-	struct stasis_topic * mailbox_specific_topic = pbx_mwi_topic((subscription->mailbox)->uniqueid);
-	if (mailbox_specific_topic) {
-		pbx_subscription = stasis_subscribe_pool(mailbox_specific_topic, pbx_mwi_event, subscription);
-#		if CS_AST_HAS_STASIS_SUBSCRIPTION_SET_FILTER
-		stasis_subscription_accept_message_type(pbx_subscription, pbx_mwi_state_type());
-		stasis_subscription_accept_message_type(pbx_subscription, stasis_subscription_change_type());
-		//stasis_subscription_accept_message_type(subscription->pbx_subscription, stasis_subscription_change_type());
-		stasis_subscription_set_filter(pbx_subscription, STASIS_SUBSCRIPTION_FILTER_SELECTIVE);
-#		endif
-	}
-#	endif
 	//pbxMailboxGetCached(subscription);
 	return pbx_subscription;
 }
@@ -186,11 +86,7 @@ static void pbxMailboxUnsubscribe(mwi_subscription_t *subscription)
 		(subscription->line)->name, __PRETTY_FUNCTION__, (subscription->mailbox)->uniqueid);
 
 	if(subscription->pbx_subscription) {
-#	if ASTERISK_VERSION_GROUP >= 117
 		pbx_mwi_unsubscribe_and_join((struct pbx_mwi_subscriber *)subscription->pbx_subscription);
-#	else
-		stasis_unsubscribe_and_join(subscription->pbx_subscription);
-#	endif
 	}
 }
 /* discard polling implementation */
@@ -238,7 +134,6 @@ static void pbxMailboxUnsubscribe(mwi_subscription_t *subscription)
 	subscription->sched = SCCP_SCHED_DEL(subscription->schedUpdate);
 }
 */
-#endif
 
 /* ===========================
  * Create/Destroy Subscription
@@ -402,15 +297,6 @@ static int showSubscriptions(int fd, sccp_cli_totals_t *totals, struct mansessio
 	mwi_subscription_t * subscription = SCCP_VECTOR_GET(&subscriptions, idx); \
 	constLinePtr line = subscription->line;
 
-#if defined (CS_AST_HAS_EVENT)
-#define CLI_AMI_TABLE_FIELDS 																\
- 		CLI_AMI_TABLE_FIELD(Mailbox,		"-30.30",	s,	30,	(subscription->mailbox)->uniqueid)				\
- 		CLI_AMI_TABLE_FIELD(LineName,		"-20.20",	s,	20,	line->name)							\
- 		CLI_AMI_TABLE_FIELD(New,		"3.3",		d,	3,	line->voicemailStatistic.newmsgs)				\
- 		CLI_AMI_TABLE_FIELD(Old,		"3.3",		d,	3,	line->voicemailStatistic.oldmsgs)				\
- 		CLI_AMI_TABLE_FIELD(Sub,		"-3.3",		s,	3,	subscription->pbx_subscription ? "YES" : "NO")
-
-#elif defined(CS_AST_HAS_STASIS)
 #define CLI_AMI_TABLE_FIELDS 																\
  		CLI_AMI_TABLE_FIELD(Mailbox,		"-30.30",	s,	30,	(subscription->mailbox)->uniqueid)				\
  		CLI_AMI_TABLE_FIELD(LineName,		"-20.20",	s,	20,	line->name)							\
@@ -419,13 +305,6 @@ static int showSubscriptions(int fd, sccp_cli_totals_t *totals, struct mansessio
  		CLI_AMI_TABLE_FIELD(Sub,		"-3.3",		s,	3,	subscription->pbx_subscription ? "YES" : "NO")			\
 		CLI_AMI_TABLE_FIELD(AstUniq,		"36.36",	s,	36,	subscription->pbx_subscription ? 				\
 											stasis_subscription_uniqueid(subscription->pbx_subscription) : "")
-#else
-#define CLI_AMI_TABLE_FIELDS 																\
- 		CLI_AMI_TABLE_FIELD(Mailbox,		"-30.30",	s,	30,	(subscription->mailbox)->uniqueid)				\
- 		CLI_AMI_TABLE_FIELD(LineName,		"-20.20",	s,	20,	line->name)							\
- 		CLI_AMI_TABLE_FIELD(New,		"3.3",		d,	3,	line->voicemailStatistic.newmsgs)				\
- 		CLI_AMI_TABLE_FIELD(Old,		"3.3",		d,	3,	line->voicemailStatistic.oldmsgs)
-#endif
 #include "sccp_cli_table.h"
 		local_line_total++;
 	subscription_unlock();

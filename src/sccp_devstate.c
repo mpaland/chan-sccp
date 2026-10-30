@@ -17,9 +17,6 @@ SCCP_FILE_VERSION(__FILE__, "");
 #	include "sccp_utils.h"
 #	include <asterisk/devicestate.h>
 
-#	if defined(CS_AST_HAS_EVENT) && defined(HAVE_PBX_EVENT_H)                                        // ast_event_subscribe
-#		include <asterisk/event.h>
-#	endif
 
 typedef struct FeatureState feature_state_t;
 struct FeatureState {
@@ -52,11 +49,7 @@ static SCCP_LIST_HEAD(, struct deviceState) deviceStates;
 void deviceRegisterListener(const sccp_event_t * event);
 deviceState_t * createDeviceStateHandler(const char * devstate);
 deviceState_t * getDeviceStateHandler(const char * devstate);
-#	if ASTERISK_VERSION_GROUP >= 112
 void changed_cb(void * data, struct stasis_subscription * sub, struct stasis_message * msg);
-#	else
-void changed_cb(const struct ast_event * ast_event, void * data);
-#	endif
 void notifySubscriber(deviceState_t * deviceState, const SubscribingDevice_t * subscriber);
 
 const char devstate_db_family[] = "CustomDevstate";
@@ -300,16 +293,10 @@ deviceState_t * createDeviceStateHandler(const char * devstate)
 	}
 	SCCP_LIST_HEAD_INIT(&deviceState->subscribers);
 	sccp_copy_string(deviceState->devicestate, devstate, sizeof(deviceState->devicestate));
-#if CS_AST_HAS_STASIS
 	struct stasis_topic *devstate_specific_topic = ast_device_state_topic((const char *)buf);
 	if (devstate_specific_topic) {
 		deviceState->sub = stasis_subscribe(devstate_specific_topic, changed_cb, deviceState);
 	}
-#elif CS_AST_HAS_EVENT
-	deviceState->sub = pbx_event_subscribe(AST_EVENT_DEVICE_STATE_CHANGE, changed_cb, "sccp_devstate_changed_cb", deviceState, AST_EVENT_IE_DEVICE, AST_EVENT_IE_PLTYPE_STR, buf, AST_EVENT_IE_END);
-#else
-	pbx_log(LOG_ERROR, "SCCP: distributed devstate not supported\n");
-#endif
 	deviceState->featureState = ast_device_state(buf);
 
 	SCCP_LIST_INSERT_HEAD(&deviceStates, deviceState, list);
@@ -372,25 +359,17 @@ void notifySubscriber(deviceState_t * deviceState, const SubscribingDevice_t * s
 }
 
 // void changed_cb(const struct ast_event *ast_event, void *data)
-#	if ASTERISK_VERSION_GROUP >= 112
 void changed_cb(void * data, struct stasis_subscription * sub, struct stasis_message * msg)
-#	else
-void changed_cb(const struct ast_event * ast_event, void * data)
-#	endif
 {
 	deviceState_t * deviceState = (deviceState_t *)data;
 	SubscribingDevice_t * subscriber = NULL;
 	enum ast_device_state newState = AST_DEVICE_UNKNOWN;
 
-#	if ASTERISK_VERSION_GROUP >= 112
 	struct ast_device_state_message *dev_state = (struct ast_device_state_message *)stasis_message_data(msg);
 	if(ast_device_state_message_type() != stasis_message_type(msg) || !dev_state->eid) { /* ignore wrong message type or non-aggregate states */
 		return;
 	}
 	newState = dev_state->state;
-#	else
-	newState = (enum ast_device_state)pbx_event_get_ie_uint(ast_event, AST_EVENT_IE_STATE);
-#	endif
 	if(deviceState) {
 		deviceState->featureState = newState;
 		SCCP_LIST_TRAVERSE(&deviceState->subscribers, subscriber, list) {
