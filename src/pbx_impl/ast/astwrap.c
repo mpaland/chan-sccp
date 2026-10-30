@@ -1309,29 +1309,36 @@ static boolean_t sccp_astwrap_allocPBXChannel(sccp_channel_t * channel, const vo
 }
 
 /*!
- * \brief Uses ast_channel_move instead of the old masquerade procedure to force a channel into a bridge and hangup the peer channel
+ * \brief Move pbxChannel into the place of pbxTmpChannel (replaces the old masquerade procedure)
+ *
+ * Reference contract: this helper never consumes a reference owned by the caller. It answers pbxChannel, moves it
+ * into pbxTmpChannel and, on success, hangs up the now orphaned pbxChannel using a reference it takes itself. On failure
+ * nothing is hung up; the caller decides what to do with both channels and drops its own references in every case.
+ *
+ * \param pbxChannel    the channel that is moved (source), hung up on success
+ * \param pbxTmpChannel the channel whose place is taken (destination), continues to live
+ * \retval TRUE  pbxTmpChannel now carries the call that was on pbxChannel
+ * \retval FALSE answering or moving failed, both channels untouched
  */
 static boolean_t sccp_astwrap_masqueradeHelper(PBX_CHANNEL_TYPE * pbxChannel, PBX_CHANNEL_TYPE * pbxTmpChannel)
 {
-	boolean_t res = FALSE;
-	pbx_log(LOG_NOTICE, "SCCP: (masqueradeHelper) answer temp: %s\n", ast_channel_name(pbxTmpChannel));
-
-	ast_channel_ref(pbxChannel);
-	if(ast_answer(pbxChannel) == 0) {
-		pbx_log(LOG_NOTICE, "SCCP: (masqueradeHelper) replace pbxTmpChannel: %s with %s (move)\n", ast_channel_name(pbxTmpChannel), ast_channel_name(pbxChannel));
-		if(ast_channel_move(pbxTmpChannel, pbxChannel)) {
-			pbx_log(LOG_ERROR, "SCCP: (masqueradeHelper) move failed. Hanging up tmp channel: %s\n", ast_channel_name(pbxTmpChannel));
-			ast_hangup(pbxTmpChannel);
-		} else {
-			pbx_log(LOG_NOTICE, "SCCP: (masqueradeHelper) move succeeded. Hanging up orphan: %s\n", ast_channel_name(pbxChannel));
-			ast_hangup(pbxChannel);
-			pbx_channel_set_hangupcause(pbxTmpChannel, AST_CAUSE_REDIRECTED_TO_NEW_DESTINATION);
-			res = TRUE;
-		}
-		pbx_channel_unref(pbxTmpChannel);
+	if (!pbxChannel || !pbxTmpChannel) {
+		return FALSE;
 	}
-	pbx_channel_unref(pbxChannel);
-	return res;
+	pbx_log(LOG_NOTICE, "SCCP: (masqueradeHelper) answer temp: %s\n", ast_channel_name(pbxTmpChannel));
+	if (ast_answer(pbxChannel) != 0) {
+		pbx_log(LOG_ERROR, "SCCP: (masqueradeHelper) answering %s failed\n", ast_channel_name(pbxChannel));
+		return FALSE;
+	}
+	pbx_log(LOG_NOTICE, "SCCP: (masqueradeHelper) replace pbxTmpChannel: %s with %s (move)\n", ast_channel_name(pbxTmpChannel), ast_channel_name(pbxChannel));
+	if (ast_channel_move(pbxTmpChannel, pbxChannel)) {
+		pbx_log(LOG_ERROR, "SCCP: (masqueradeHelper) moving %s into %s failed\n", ast_channel_name(pbxChannel), ast_channel_name(pbxTmpChannel));
+		return FALSE;
+	}
+	pbx_log(LOG_NOTICE, "SCCP: (masqueradeHelper) move succeeded. Hanging up orphan: %s\n", ast_channel_name(pbxChannel));
+	ast_hangup(ast_channel_ref(pbxChannel));									/* ast_hangup consumes one reference: ours */
+	pbx_channel_set_hangupcause(pbxTmpChannel, AST_CAUSE_REDIRECTED_TO_NEW_DESTINATION);
+	return TRUE;
 }
 
 static boolean_t sccp_astwrap_allocTempPBXChannel(PBX_CHANNEL_TYPE * pbxSrcChannel, PBX_CHANNEL_TYPE ** _pbxDstChannel)
@@ -2575,14 +2582,12 @@ static boolean_t sccp_astwrap_rtpGetUs(PBX_RTP_TYPE * rtp, struct sockaddr_stora
 
 static boolean_t sccp_astwrap_getChannelByName(const char *name, PBX_CHANNEL_TYPE ** pbx_channel)
 {
-	PBX_CHANNEL_TYPE *ast = ast_channel_get_by_name(name);
+	PBX_CHANNEL_TYPE *ast = ast_channel_get_by_name(name);					/* returns a reference owned by the caller */
 
 	if (!ast) {
 		return FALSE;
 	}
-	pbx_channel_lock(ast);
-	*pbx_channel = pbx_channel_ref(ast);
-	pbx_channel_unlock(ast);
+	*pbx_channel = ast;
 	return TRUE;
 }
 

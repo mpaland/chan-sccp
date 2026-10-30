@@ -660,66 +660,41 @@ int sccp_pbx_remote_answer(constChannelPtr channel)
 		pbx_channel_unlock(c->owner);
 
 		const char * destinationChannelName = pbx_builtin_getvar_helper(tmp_channel, CS_BRIDGEPEERNAME);
-
 		PBX_CHANNEL_TYPE * destination = NULL;
+
 		if(sccp_strlen_zero(destinationChannelName) || !iPbx.getChannelByName(destinationChannelName, &destination)) {
-			pbx_log(LOG_NOTICE, "%s: (%s) Could not retrieve channel for destination: %s", c->designator, __func__, destinationChannelName);
-			pbx_channel_unref(tmp_channel);
-			pbx_channel_unref(forwarder);
-			return -2;
-		}
-		/*
-		if (iPbx.getChannelAppl(c)) {
-			sccp_log_and((DEBUGCAT_PBX + DEBUGCAT_HIGH)) (VERBOSE_PREFIX_3 "%s: (sccp_pbx_answer) %s bridging to dialplan application %s\n", c->currentDeviceId, iPbx.getChannelName(c), iPbx.getChannelAppl(c));
-		}
-		*/
-		sccp_log(DEBUGCAT_PBX)(VERBOSE_PREFIX_3 "\n"
-							"\tendpoint1           | bridge             | endpoint2          | comment\n"
-							"\t=================== | ================== | ================== | =================\n"
-							"\t%-20.20s| primary_call       |%20.20s| creates tmp_channel in sccp_pbx_call to call forwarding destination\n"
-							"\t%-20.20s| temp_bridge        |%20.20s| masquerade on answer of endpoint 2\n"
-							"\t------------------- | ------------------ | ------------------ | <-- masquerade temp_bridge:endpoint2 -> primary_call:endpoint2\n"
-							"\t%-20.20s| primary call       |%20.20s| after masquerading, hangup temp_bridge:temp_channel\n",
-				       "incoming", pbx_channel_name(forwarder), pbx_channel_name(tmp_channel), destinationChannelName, "incoming", destinationChannelName);
-		do {
-			// retrieve channel by name which will replace in the forwarded channel
-			sccp_channel_release(&c->parentChannel);
-			if(destination) {
-				sccp_log((DEBUGCAT_PBX))(VERBOSE_PREFIX_3 "%s: (%s) handling forwarded call. Replace %s with %s.\n", c->designator, __func__, pbx_channel_name(forwarder), pbx_channel_name(destination));
-				if(!iPbx.masqueradeHelper(destination, forwarder)) {
-					pbx_log(LOG_ERROR, "%s: (%s) Failed to masquerade bridge into forwarded channel\n", c->designator, __func__);
-					if(destination) {
-						pbx_channel_unref(destination);
-					}
-					pbx_channel_unref(forwarder);
-					res = -3;
-					break;
-				}
-				// Note: destination has taken the place of forwarder
+			pbx_log(LOG_NOTICE, "%s: (%s) Could not retrieve channel for destination: %s\n", c->designator, __func__, destinationChannelName);
+			res = -2;
+		} else {
+			sccp_log(DEBUGCAT_PBX)(VERBOSE_PREFIX_3 "\n"
+								"\tendpoint1           | bridge             | endpoint2          | comment\n"
+								"\t=================== | ================== | ================== | =================\n"
+								"\t%-20.20s| primary_call       |%20.20s| creates tmp_channel in sccp_pbx_call to call forwarding destination\n"
+								"\t%-20.20s| temp_bridge        |%20.20s| masquerade on answer of endpoint 2\n"
+								"\t------------------- | ------------------ | ------------------ | <-- masquerade temp_bridge:endpoint2 -> primary_call:endpoint2\n"
+								"\t%-20.20s| primary call       |%20.20s| after masquerading, hangup temp_bridge:temp_channel\n",
+					       "incoming", pbx_channel_name(forwarder), pbx_channel_name(tmp_channel), destinationChannelName, "incoming", destinationChannelName);
+			sccp_channel_release(&c->parentChannel);							/* explicit release, we are done with the parent */
+			sccp_log((DEBUGCAT_PBX))(VERBOSE_PREFIX_3 "%s: (%s) handling forwarded call. Replace %s with %s.\n", c->designator, __func__, pbx_channel_name(forwarder), pbx_channel_name(destination));
+			if(iPbx.masqueradeHelper(destination, forwarder)) {
+				/* destination has taken the place of forwarder */
 				pbx_indicate(forwarder, AST_CONTROL_CONNECTED_LINE);
 				sccp_log((DEBUGCAT_PBX))(VERBOSE_PREFIX_4 "%s: (%s) Masqueraded into %s\n", c->designator, __func__, pbx_channel_name(forwarder));
 				res = 0;
 			} else {
-				pbx_log(LOG_ERROR, "%s: (%s) Could not retrieve forwarding channel by name:%s: -> Hangup\n", c->designator, __func__, destinationChannelName);
-				if(pbx_channel_state(tmp_channel) == AST_STATE_RING && pbx_channel_state(forwarder) == AST_STATE_DOWN && iPbx.getChannelPbx(c)) {
-					sccp_log((DEBUGCAT_PBX)) (VERBOSE_PREFIX_4 "SCCP: Receiver Hungup: (hasPBX: %s)\n", iPbx.getChannelPbx(c) ? "yes" : "no");
-					pbx_channel_set_hangupcause(forwarder, AST_CAUSE_CALL_REJECTED);
-				} else {
-					pbx_log(LOG_ERROR, "%s: (%s) We did not find bridge channel for call forwarding call. Hangup\n", c->currentDeviceId, __func__);
-					pbx_channel_set_hangupcause(forwarder, AST_CAUSE_REQUESTED_CHAN_UNAVAIL);
-					sccp_channel_endcall(c);
-				}
+				pbx_log(LOG_ERROR, "%s: (%s) Failed to masquerade bridge into forwarded channel -> Hangup\n", c->designator, __func__);
 				pbx_channel_set_hangupcause(forwarder, AST_CAUSE_REQUESTED_CHAN_UNAVAIL);
-				pbx_channel_unref(forwarder);
-				if(destination) {
-					pbx_channel_unref(destination);
-				}
-				res = -4;
+				ast_softhangup(forwarder, AST_SOFTHANGUP_DEV);						/* forwarder is driven by its own pbx thread, let it hang up */
+				sccp_channel_endcall(c);
+				res = -3;
 			}
-		} while(0);
-		if(tmp_channel) {
-			pbx_channel_unref(tmp_channel);
 		}
+		/* the masquerade helper never consumes references, drop ours on every path */
+		if(destination) {
+			pbx_channel_unref(destination);
+		}
+		pbx_channel_unref(forwarder);
+		pbx_channel_unref(tmp_channel);
 	} else {
 		sccp_log((DEBUGCAT_CORE))(VERBOSE_PREFIX_3 "%s: (%s) Outgoing call %s being answered by remote party\n", c->currentDeviceId, __func__, iPbx.getChannelName(c));
 		AUTO_RELEASE(sccp_device_t, d , sccp_channel_getDevice(c));

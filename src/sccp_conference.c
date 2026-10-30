@@ -445,22 +445,25 @@ static void sccp_conference_connect_bridge_channels_to_participants(constConfere
 static boolean_t sccp_conference_masqueradeChannel(PBX_CHANNEL_TYPE * participant_ast_channel, sccp_conference_t * conference, sccp_participant_t * participant)
 {
 	if (participant && participant_ast_channel) {
+		/* reference accounting: the caller handed us one reference on participant_ast_channel, which we drop on every
+		 * path. allocTempPBXChannel returns one reference on conferenceBridgePeer, which the conference thread consumes
+		 * with its final pbx_hangup(); the masquerade helper never consumes references. */
 		if (!(iPbx.allocTempPBXChannel(participant_ast_channel, &participant->conferenceBridgePeer))) {
 			pbx_log(LOG_ERROR, "SCCPCONF/%04d: Creation of Temp Channel Failed. Exiting.\n", conference->id);
-			pbx_hangup(participant->conferenceBridgePeer);
 			pbx_channel_unref(participant_ast_channel);
 			return FALSE;
 		}
 		if (!iPbx.masqueradeHelper(participant_ast_channel, participant->conferenceBridgePeer)) {
 			pbx_log(LOG_ERROR, "SCCPCONF/%04d: Failed to Masquerade TempChannel.\n", conference->id);
-			pbx_hangup(participant->conferenceBridgePeer);
+			pbx_hangup(participant->conferenceBridgePeer);								/* consumes the allocation reference */
+			participant->conferenceBridgePeer = NULL;
 			pbx_channel_unref(participant_ast_channel);
 			return FALSE;
 		}
-		pbx_channel_ref(participant->conferenceBridgePeer);
+		pbx_channel_unref(participant_ast_channel);									/* moved into conferenceBridgePeer and hung up by the helper */
 		if (pbx_pthread_create_background(&participant->joinThread, NULL, sccp_conference_thread, participant) < 0) {
-			pbx_hangup(participant->conferenceBridgePeer);
-			pbx_channel_unref(participant->conferenceBridgePeer);
+			pbx_hangup(participant->conferenceBridgePeer);								/* consumes the allocation reference */
+			participant->conferenceBridgePeer = NULL;
 			return FALSE;
 		}
 		sccp_log((DEBUGCAT_CORE + DEBUGCAT_CONFERENCE)) (VERBOSE_PREFIX_4 "SCCPCONF/%04d: Added Participant %d (Channel: %s)\n", conference->id, participant->id, pbx_channel_name(participant->conferenceBridgePeer));

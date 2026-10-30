@@ -131,7 +131,7 @@ typedef struct _PbxInterface {
 
 	/* conference */
 	boolean_t(*const allocTempPBXChannel) (PBX_CHANNEL_TYPE * pbxSrcChannel, PBX_CHANNEL_TYPE ** pbxDstChannel);
-	boolean_t(*const masqueradeHelper) (PBX_CHANNEL_TYPE *pbxChannel, PBX_CHANNEL_TYPE *pbxTmpchannel);
+	boolean_t(*const masqueradeHelper) (PBX_CHANNEL_TYPE *pbxChannel, PBX_CHANNEL_TYPE *pbxTmpchannel);	/*!< move pbxChannel into pbxTmpchannel; never consumes caller references, see sccp_astwrap_masqueradeHelper */
 	PBX_CHANNEL_TYPE *(*const requestAnnouncementChannel) (pbx_format_enum_type format, const PBX_CHANNEL_TYPE * requestor, void *data);
 
 	boolean_t(*const set_language)(PBX_CHANNEL_TYPE *pbxChannel, const char *language);
