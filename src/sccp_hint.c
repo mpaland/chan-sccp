@@ -561,7 +561,6 @@ static sccp_hint_list_t *sccp_hint_create(char *hint_exten, char *hint_context)
 	sccp_log((DEBUGCAT_HINT)) (VERBOSE_PREFIX_4 "SCCP: (sccp_hint_create) Create hint for exten: %s context: %s\n", hint_exten, hint_context);
 
 	int res = pbx_get_hint(hint_dialplan, sizeof(hint_dialplan) - 1, NULL, 0, NULL, hint_context, hint_exten);
-	// CS_AST_HAS_NEW_HINT
 
 	if (!res || sccp_strlen_zero(hint_dialplan)) {
 		sccp_log((DEBUGCAT_HINT)) (VERBOSE_PREFIX_4 "SCCP: (sccp_hint_create) No hint configuration in the dialplan exten: %s and context: %s\n", hint_exten, hint_context);
@@ -603,12 +602,10 @@ static sccp_hint_list_t *sccp_hint_create(char *hint_exten, char *hint_context)
 	struct stasis_topic *devstate_hint_dialplan = ast_device_state_topic(hint->hint_dialplan);
 	if (devstate_hint_dialplan) {
 		hint->device_state_sub = stasis_subscribe(devstate_hint_dialplan, sccp_hint_distributed_devstate_cb, hint);
-//#  if CS_AST_HAS_STASIS_SUBSCRIPTION_SET_FILTER
 //		if (hint->device_state_sub)
 //			stasis_subscription_accept_message_type((hint->device_state_sub)->event_sub, ast_device_state_message_type());
 //			stasis_subscription_set_filter((hint->device_state_sub)->event_sub, STASIS_SUBSCRIPTION_FILTER_SELECTIVE);
 //		}
-//#  endif
 	}
 #endif
 

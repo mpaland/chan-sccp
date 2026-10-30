@@ -293,7 +293,7 @@ sccp_conference_t *sccp_conference_create(devicePtr device, channelPtr channel)
 	/* using the SMART flag results in issues when removing forgeign participant, because it try to create a new conference and merge into it. Which seems to be more complex then necessary */
 	conference->bridge = pbx_bridge_new(bridgeCapabilities, AST_BRIDGE_FLAG_DISSOLVE_EMPTY | AST_BRIDGE_FLAG_MASQUERADE_ONLY | AST_BRIDGE_FLAG_TRANSFER_PROHIBITED, channel->designator, conferenceIdentifier, NULL);
 
-#if defined(CS_SCCP_VIDEO) && ASTERISK_VERSION_GROUP >= 112
+#if defined(CS_SCCP_VIDEO)
 	ast_bridge_set_talker_src_video_mode(conference->bridge);
 #endif
 	if (!conference->bridge) {

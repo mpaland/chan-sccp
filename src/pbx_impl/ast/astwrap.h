@@ -16,7 +16,6 @@
 
 #include "pbx_impl/ast/ast_announce.h"
 
-#define sccp_sched_context_destroy sched_context_destroy
 
 #define PBX_ENDPOINT_TYPE struct ast_endpoint
 #define PBX_EVENT_SUBSCRIPTION struct stasis_subscription

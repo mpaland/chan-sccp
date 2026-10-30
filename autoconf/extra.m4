@@ -1102,7 +1102,7 @@ AC_DEFUN([CS_ENABLE_VIDEO], [
 
 AC_DEFUN([CS_ENABLE_DISTRIBUTED_DEVSTATE], [
 	AC_ARG_ENABLE(distributed_devicestate, 
-		[AC_HELP_STRING([--enable-distributed-devicestate], [enable distributed devicestate (ast 1.8 - 12)])], 
+		[AC_HELP_STRING([--enable-distributed-devicestate], [enable distributed devicestate via the stasis device state topic])], 
 		[ac_cv_use_distributed_devicestate=$enableval], 
 		[ac_cv_use_distributed_devicestate=no]
 	)

@@ -58,7 +58,6 @@
 #define pbx_channel_redirecting_effective_orig(_a) ast_channel_redirecting_effective_orig(_a)
 #define pbx_channel_connected_id(_a) ast_channel_connected(_a)->id
 #define pbx_channel_connected_source(_a) ast_channel_connected(_a)->source
-#define pbx_channel_monitor(_a) ast_channel_monitor(_a)
 #define pbx_channel_string2amaflag(_a) ast_channel_string2amaflag(_a)
 #define pbx_channel_amaflags2string(_a) ast_channel_amaflags2string(_a)
 #define pbx_event_subscribe(_a) _a = stasis_subscribe(_a)
@@ -111,13 +110,9 @@
 #endif
 
 // codec / format redefinitions
-#define pbx_codec_pref_index ast_codec_pref_index
-#define pbx_codec_pref_getsize ast_codec_pref_getsize
-#define pbx_codec2str ast_codec2str
 
 // application / module / cli redefinitions
 #define pbx_channel_register ast_channel_register
-#define pbx_channel_register_ex ast_channel_register_ex
 #define pbx_channel_unregister ast_channel_unregister
 
 // general redefinitions
@@ -134,8 +129,6 @@
 #define pbx_channel_alloc ast_channel_alloc
 #define pbx_null_frame ast_null_frame
 #define pbx_jb_configure ast_jb_configure
-#define pbx_rtp_proto_register ast_rtp_proto_register
-#define pbx_rtp_proto_unregister ast_rtp_proto_unregister
 #define pbx_rtp_glue_register ast_rtp_glue_register
 #define pbx_rtp_glue_unregister ast_rtp_glue_unregister
 #define pbx_add_extension ast_add_extension
@@ -167,19 +160,13 @@
 #define pbx_category_browse ast_category_browse
 #define pbx_cause ast_cause
 #define pbx_ama_flags_type enum ama_flags
-#define pbx_cdr_amaflags2int ast_cdr_amaflags2int
-#define pbx_cdr_flags2str ast_cdr_flags2str
-#define pbx_cdr_start ast_cdr_start
-#define pbx_cdr_update ast_cdr_update
 #define pbx_channel_defer_dtmf ast_channel_defer_dtmf
 #define pbx_channel_get_by_name ast_channel_get_by_name
 #define pbx_channel_iterator_all_new ast_channel_iterator_all_new
 #define pbx_channel_iterator_destroy ast_channel_iterator_destroy
 #define pbx_channel_lock ast_channel_lock
-#define pbx_channel_masquerade ast_channel_masquerade
 #define pbx_channel_queue_connected_line_update ast_channel_queue_connected_line_update
 #define pbx_channel_register ast_channel_register
-#define pbx_channel_search_locked ast_channel_search_locked
 #define pbx_channel_trylock ast_channel_trylock
 #define pbx_channel_undefer_dtmf ast_channel_undefer_dtmf
 #define pbx_channel_unregister ast_channel_unregister
@@ -188,7 +175,6 @@
 #define pbx_cli_entry ast_cli_entry
 #define pbx_cli_register ast_cli_register
 #define pbx_cli_unregister ast_cli_unregister
-#define pbx_codec_pref_string ast_codec_pref_string
 #define pbx_cond_t ast_cond_t
 #define pbx_cond_broadcast ast_cond_broadcast
 #define pbx_cond_destroy ast_cond_destroy
@@ -206,20 +192,7 @@
 
 
 #define pbx_devstate_val ast_devstate_val
-#define pbx_digit_usecs ast_digit_usecs
-#define pbx_do_masquerade ast_do_masquerade
-typedef struct ast_event pbx_event_t;
 
-#define pbx_event_get_ie_str ast_event_get_ie_str
-#define pbx_event_get_ie_uint ast_event_get_ie_uint
-#define pbx_event_new ast_event_new
-/*
-#if defined( CS_AST_HAS_STASIS )
-#define pbx_event_sub stasis_subscription
-#else
-#define pbx_event_sub ast_event_sub
-#endif
-*/
 #define pbx_event_sub stasis_subscription
 #define pbx_mwi_state_type ast_mwi_state_type
 typedef struct pbx_event_sub pbx_event_subscription_t;
@@ -227,13 +200,10 @@ typedef struct pbx_event_sub pbx_event_subscription_t;
 #define pbx_mwi_subscribe_pool       ast_mwi_subscribe_pool
 #define pbx_mwi_unsubscribe_and_join ast_mwi_unsubscribe_and_join
 #define pbx_mwi_subscriber           ast_mwi_subscriber
-#define pbx_event_queue_and_cache ast_event_queue_and_cache
 #define pbx_exists_extension ast_exists_extension
 #define pbx_extension_state_add ast_extension_state_add
 #define pbx_extension_state_del ast_extension_state_del
 #define pbx_extension_state ast_extension_state
-#define pbx_event_get_cached ast_event_get_cached
-#define pbx_event_destroy ast_event_destroy
 #define pbx_get_group ast_get_group
 #define pbx_get_hint ast_get_hint
 #define pbx_gethostbyname ast_gethostbyname
@@ -279,33 +249,26 @@ typedef struct pbx_event_sub pbx_event_subscription_t;
 #define pbx_rwlock_unlock(_x) ({ast_rwlock_unlock((ast_rwlock_t *)(_x));})
 #endif
 
-#define pbx_park_call ast_park_call
 #define pbx_party_name_free ast_party_name_free
 #define pbx_party_number_free ast_party_number_free
 #define pbx_pbx_run ast_pbx_run
 // #define pbx_pbx_start ast_pbx_start
 #define pbx_poll ast_poll
 #define pbx_print_group ast_print_group
-#define pbx_print_namedgroup ast_print_namedgroup
 #define pbx_pthread_create ast_pthread_create
 #define pbx_pthread_create_detached ast_pthread_create_detached
 #define pbx_pthread_create_background ast_pthread_create_background
 #define pbx_pthread_create_detached_background ast_pthread_create_detached_background
-#define pbx_pthread_mutex_lock ast_pthread_mutex_lock
-#define pbx_pthread_mutex_trylock ast_pthread_mutex_trylock
-#define pbx_pthread_mutex_unlock ast_pthread_mutex_unlock
 #define __pbx_pthread_mutex_unlock __ast_pthread_mutex_unlock
 #define __pbx_pthread_mutex_lock __ast_pthread_mutex_lock
 #define __pbx_pthread_mutex_trylock __ast_pthread_mutex_trylock
 #define pbx_queue_hangup ast_queue_hangup
 #define pbx_random ast_random
 #define pbx_realloc ast_realloc
-#define pbx_rtp_bridge ast_rtp_bridge
 #define pbx_rtp_codecs_payloads_set_rtpmap_type_rate ast_rtp_codecs_payloads_set_rtpmap_type_rate
 #define pbx_rtp_glue_register ast_rtp_glue_register
 #define pbx_rtp_glue_result ast_rtp_glue_result
 #define pbx_rtp_glue_unregister ast_rtp_glue_unregister
-#define pbx_rtp_instance_bridge ast_rtp_instance_bridge
 #define pbx_rtp_instance_change_source ast_rtp_instance_change_source
 #define pbx_rtp_instance_destroy ast_rtp_instance_destroy
 #define pbx_rtp_instance_fd ast_rtp_instance_fd
@@ -320,7 +283,6 @@ typedef struct pbx_event_sub pbx_event_subscription_t;
 #define pbx_rtp_instance_stop ast_rtp_instance_stop
 #define pbx_rtp_instance_update_source ast_rtp_instance_update_source
 #define pbx_rtp_instance_write ast_rtp_instance_write
-#define pbx_rtp_set_vars ast_rtp_set_vars
 #define pbx_safe_sleep ast_safe_sleep
 #define pbx_sched_add ast_sched_add
 #define pbx_sched_del ast_sched_del
@@ -328,7 +290,6 @@ typedef struct pbx_event_sub pbx_event_subscription_t;
 #define pbx_sched_wait ast_sched_wait
 #define pbx_sched_when ast_sched_when
 #define pbx_set_callerid ast_set_callerid
-#define pbx_setcallstate ast_setcallstate
 #define pbx_set_read_format ast_set_read_format
 #define pbx_setstate ast_setstate
 #define pbx_set_write_format ast_set_write_format

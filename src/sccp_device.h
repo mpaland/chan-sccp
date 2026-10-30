@@ -344,9 +344,6 @@ struct sccp_device_indication_cb {
 	void (*const remoteHold) (constDevicePtr device, uint8_t lineInstance, uint32_t callid, skinny_callpriority_t callpriority, skinny_callinfo_visibility_t visibility);
 };
 
-#if UNUSEDCODE // 2015-11-01
-#define sccp_dev_display(p,q) sccp_dev_display_debug(p, q, __FILE__, __LINE__, __PRETTY_FUNCTION__)
-#endif
 #define sccp_dev_displayprompt(p, q, r, s, t) sccp_dev_displayprompt_debug(p, q, r, s, t, __FILE__, __LINE__, __PRETTY_FUNCTION__)
 #define sccp_dev_displaynotify(p,q,r) sccp_dev_displaynotify_debug(p,q,r, __FILE__, __LINE__, __PRETTY_FUNCTION__)
 #define sccp_dev_displayprinotify(p,q,r,s) sccp_dev_displayprinotify_debug(p,q,r,s,__FILE__, __LINE__, __PRETTY_FUNCTION__)
