@@ -68,16 +68,7 @@ SCCP_INLINE const char * SCCP_CALL debugcat_keys(void);
 SCCP_API const char * SCCP_CALL skinny_ringermode2str(uint8_t type);
 SCCP_API int SCCP_CALL sccp_parseComposedId(const char *labelString, unsigned int maxLength, sccp_subscription_id_t *subscriptionId, char extension[SCCP_MAX_EXTENSION]);
 
-#ifndef HAVE_PBX_STRINGS_H
-SCCP_API char * SCCP_CALL pbx_skip_blanks(char *str);
-SCCP_API char * SCCP_CALL pbx_trim_blanks(char *str);
-SCCP_API char * SCCP_CALL pbx_skip_nonblanks(char *str);
-SCCP_API char * SCCP_CALL pbx_strip(char *s);
-#endif
 
-#ifndef CS_AST_HAS_APP_SEPARATE_ARGS
-SCCP_API unsigned SCCP_CALL int sccp_app_separate_args(char *buf, char delim, char **array, int arraylen);
-#endif
 
 SCCP_API void SCCP_CALL sccp_util_featureStorageBackend(const sccp_event_t * const event);
 SCCP_API sccp_feature_type_t SCCP_CALL sccp_featureStr2featureID(const char *str);

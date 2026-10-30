@@ -35,9 +35,7 @@ SCCP_FILE_VERSION(__FILE__, "");
 #else
 #define sccp_netsock_poll poll
 #endif
-#ifdef HAVE_PBX_ACL_H				// AST_SENSE_ALLOW
 #  include <asterisk/acl.h>
-#endif
 #include <asterisk/cli.h>
 #include <signal.h>
 

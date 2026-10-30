@@ -775,10 +775,8 @@ static int sccp_show_globals(int fd, sccp_cli_totals_t *totals, struct mansessio
 #ifdef CS_SCCP_PICKUP
 	sccp_print_group(pickupgroup_buf, DEFAULT_PBX_STR_BUFFERSIZE, GLOB(pickupgroup));
 	CLI_AMI_OUTPUT_PARAM("Pickupgroup", CLI_AMI_LIST_WIDTH, "%s", pickupgroup_buf ? pbx_str_buffer(pickupgroup_buf) : "");
-#ifdef CS_AST_HAS_NAMEDGROUP
 	CLI_AMI_OUTPUT_PARAM("Named callgroup", CLI_AMI_LIST_WIDTH, "%s", GLOB(namedcallgroup) ? GLOB(namedcallgroup) : "");
 	CLI_AMI_OUTPUT_PARAM("Named pickupgroup", CLI_AMI_LIST_WIDTH, "%s", GLOB(namedpickupgroup) ? GLOB(namedpickupgroup) : "");
-#endif
 	CLI_AMI_OUTPUT_BOOL("Directed Pickup",		CLI_AMI_LIST_WIDTH, GLOB(directed_pickup));
 	CLI_AMI_OUTPUT_PARAM("Directed Pickup Context",	CLI_AMI_LIST_WIDTH, "%s %s", GLOB(directed_pickup_context), sccp_strlen_zero(GLOB(directed_pickup_context)) ? "" : (pbx_context_find(GLOB(directed_pickup_context)) ? "<context exists>" : "<context not found !!>"));
 	CLI_AMI_OUTPUT_BOOL("Pickup Mode Answer ", CLI_AMI_LIST_WIDTH, GLOB(pickup_modeanswer));
@@ -824,9 +822,6 @@ static int sccp_show_globals(int fd, sccp_cli_totals_t *totals, struct mansessio
 	CLI_AMI_OUTPUT_PARAM("Jitterbuffer resync", CLI_AMI_LIST_WIDTH, "%ld", GLOB(global_jbconf)->resync_threshold);
 	CLI_AMI_OUTPUT_PARAM("Jitterbuffer impl", CLI_AMI_LIST_WIDTH, "%s", GLOB(global_jbconf)->impl);
 	CLI_AMI_OUTPUT_BOOL("Jitterbuffer log  ", CLI_AMI_LIST_WIDTH, pbx_test_flag(GLOB(global_jbconf), AST_JB_LOG));
-#ifdef CS_AST_JB_TARGET_EXTRA
-	CLI_AMI_OUTPUT_PARAM("Jitterbuf target extra", CLI_AMI_LIST_WIDTH, "%ld", GLOB(global_jbconf)->target_extra);
-#endif
 	CLI_AMI_OUTPUT_PARAM("Token FallBack", CLI_AMI_LIST_WIDTH, "%s", GLOB(token_fallback));
 	CLI_AMI_OUTPUT_PARAM("Token Backoff-Time", CLI_AMI_LIST_WIDTH, "%d", GLOB(token_backoff_time));
 	CLI_AMI_OUTPUT_BOOL("Hotline_Enabled", CLI_AMI_LIST_WIDTH, GLOB(allowAnonymous));
@@ -1587,10 +1582,8 @@ static int sccp_show_line(int fd, sccp_cli_totals_t *totals, struct mansession *
 	CLI_AMI_OUTPUT_BOOL("Directed Pickup",		CLI_AMI_LIST_WIDTH, l->directed_pickup);
 	CLI_AMI_OUTPUT_PARAM("Directed Pickup Context",	CLI_AMI_LIST_WIDTH, "%s %s", l->directed_pickup_context, sccp_strlen_zero(l->directed_pickup_context) ? "" : (pbx_context_find(l->directed_pickup_context) ? "<context exists>" : "<context not found !!>"));
 	CLI_AMI_OUTPUT_BOOL("Pickup Mode Answer",	CLI_AMI_LIST_WIDTH, l->pickup_modeanswer);
-#ifdef CS_AST_HAS_NAMEDGROUP
 	CLI_AMI_OUTPUT_PARAM("Named Call Group",	CLI_AMI_LIST_WIDTH, "%s", l->namedcallgroup ? l->namedcallgroup : "NONE");
 	CLI_AMI_OUTPUT_PARAM("Named Pickup Group",	CLI_AMI_LIST_WIDTH, "%s", l->namedpickupgroup ? l->namedpickupgroup : "NONE");
-#	endif
 #endif
 	CLI_AMI_OUTPUT_PARAM("Combined Audio Caps",	CLI_AMI_LIST_WIDTH, "%s", acap_buf);
 	CLI_AMI_OUTPUT_PARAM("Audio Preferences",	CLI_AMI_LIST_WIDTH, "%s", apref_buf);
@@ -4124,13 +4117,8 @@ int sccp_register_cli(void)
 		res |= pbx_cli_register(cli_entries + i);
 	}
 
-#if ASTERISK_VERSION_NUMBER < 10600
-#define _MAN_COM_FLAGS	EVENT_FLAG_SYSTEM | EVENT_FLAG_COMMAND
-#define _MAN_REP_FLAGS	EVENT_FLAG_SYSTEM | EVENT_FLAG_CONFIG
-#else
 #define _MAN_COM_FLAGS	(EVENT_FLAG_SYSTEM | EVENT_FLAG_COMMAND)
 #define _MAN_REP_FLAGS	(EVENT_FLAG_SYSTEM | EVENT_FLAG_CONFIG | EVENT_FLAG_REPORTING)
-#endif
 	res |= pbx_manager_register("SCCPShowGlobals", _MAN_REP_FLAGS, manager_show_globals, "show globals setting", ami_globals_usage);
 	res |= pbx_manager_register("SCCPShowDevices", _MAN_REP_FLAGS, manager_show_devices, "show devices", ami_devices_usage);
 	res |= pbx_manager_register("SCCPShowDevice", _MAN_REP_FLAGS, manager_show_device, "show device settings", ami_device_usage);

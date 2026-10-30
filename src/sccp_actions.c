@@ -45,9 +45,7 @@ SCCP_FILE_VERSION(__FILE__, "");
 #include <asterisk/unaligned.h>
 #endif
 #include <sys/stat.h>
-#ifdef HAVE_PBX_ACL_H				// AST_SENSE_ALLOW
 #  include <asterisk/acl.h>
-#endif
 #include <math.h>
 #include <asterisk/localtime.h>
 
@@ -2755,11 +2753,9 @@ void handle_soft_key_set_req(constSessionPtr s, devicePtr d, constMessagePtr msg
 				if (l->directed_pickup) {
 					directed_pickup = 1;
 				}
-#ifdef CS_AST_HAS_NAMEDGROUP
 				if (!sccp_strlen_zero(l->namedpickupgroup)) {
 					pickupgroup = 1;
 				}
-#endif
 #endif
 			}
 		}

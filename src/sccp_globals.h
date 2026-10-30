@@ -42,10 +42,6 @@ struct sccp_global_vars {
 	int module_running;
 	pbx_rwlock_t lock;											/*!< Asterisk: Lock Me Up and Tie me Down */
 
-#if ASTERISK_VERSION_GROUP < 110
-	pthread_t monitor_thread;										/*!< Monitor Thread */
-	sccp_mutex_t monitor_lock;										/*!< Monitor Asterisk Lock */
-#endif
 	sccp_threadpool_t *general_threadpool;									/*!< General Work Threadpool */
 
 	SCCP_RWLIST_HEAD (, sccp_session_t) sessions;								/*!< SCCP Sessions */
@@ -122,10 +118,8 @@ struct sccp_global_vars {
 	boolean_t directed_pickup;										/*!< Directed Pickup Extension Support (Boolean, default=on) */
 	char directed_pickup_context[SCCP_MAX_CONTEXT];								/*!< Directed Pickup Context to Use in DialPlan */
 	boolean_t pickup_modeanswer;										/*!< Directed PickUp Mode Answer (boolean, default" on) */
-#ifdef CS_AST_HAS_NAMEDGROUP
 	char *namedcallgroup;											/*!< Named Call Group */
 	char *namedpickupgroup;											/*!< Named Pickup Group */
-#endif
 #else
 	uint8_t _padding1[1];
 #endif
@@ -140,9 +134,7 @@ struct sccp_global_vars {
 	sccp_nat_t nat;												/*!< Network Address Translation */
 	sccp_call_answer_order_t callanswerorder;								/*!< Call Answer Order */
 
-#if ASTERISK_VERSION_NUMBER >= 10400
 	struct ast_jb_conf *global_jbconf;									/*!< Global Jitter Buffer Configuration */
-#endif
 	char *servername;											/*!< ServerName */
 	char *context;												/*!< Global / General Context */
 	skinny_capabilities_t global_preferences;

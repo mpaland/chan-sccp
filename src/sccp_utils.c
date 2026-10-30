@@ -35,14 +35,10 @@ SCCP_FILE_VERSION(__FILE__, "");
 #    include <dlfcn.h>
 #    include <bfd.h>
 #  endif
-#  if ASTERISK_VERSION_GROUP >= 112 
 #    include <asterisk/backtrace.h>
-#  endif
 #endif
 #include <asterisk/ast_version.h>		// ast_get_version
-#ifdef HAVE_PBX_ACL_H				// ast_ha, AST_SENSE_ALLOW
 #  include <asterisk/acl.h>
-#endif
 
 /*!
  * \brief Print out a messagebuffer
@@ -131,111 +127,7 @@ void sccp_safe_sleep(int ms)
 	}
 }
 
-#ifndef HAVE_PBX_STRINGS_H
-/*!
- * \brief Asterisk Skip Blanks
- * \param str as Character
- * \return String without Blanks
- */
-char *pbx_skip_blanks(char *str)
-{
-	while (*str && *str < 33)
-		str++;
 
-	return str;
-}
-
-/*!
- * \brief Asterisk Trim Blanks
- * Remove Blanks from the begining and end of a string
- * \param str as Character
- * \return String without Beginning or Ending Blanks
- */
-char *pbx_trim_blanks(char *str)
-{
-	char *work = str;
-
-	if (work) {
-		work += strlen(work) - 1;
-		while ((work >= str) && *work < 33)
-			*(work--) = '\0';
-	}
-	return str;
-}
-
-/*!
- * \brief Asterisk Non Blanks
- * \param str as Character
- * \return Only the Non Blank Characters
- */
-char *pbx_skip_nonblanks(char *str)
-{
-	while (*str && *str > 32)
-		str++;
-
-	return str;
-}
-
-/*!
- * \brief Asterisk Strip
- * \param s as Character
- * \return String without all Blanks
- */
-char *pbx_strip(char *s)
-{
-	s = pbx_skip_blanks(s);
-	if (s) {
-		pbx_trim_blanks(s);
-	}
-	return s;
-}
-#endif
-
-#ifndef CS_AST_HAS_APP_SEPARATE_ARGS
-
-/*!
- * \brief Seperate App Args
- * \param buf Buffer as Char
- * \param delim Delimiter as Char
- * \param array Array as Char Array
- * \param arraylen Array Length as Int
- * \return argc Unsigned Int
- */
-unsigned int sccp_app_separate_args(char *buf, char delim, char **array, int arraylen)
-{
-	int argc = 0;
-	char * scan = NULL;
-	int paren = 0;
-
-	if (!buf || !array || !arraylen) {
-		return 0;
-	}
-	memset(array, 0, arraylen * sizeof(*array));
-
-	scan = buf;
-
-	for (argc = 0; *scan && (argc < arraylen - 1); argc++) {
-		array[argc] = scan;
-		for (; *scan; scan++) {
-			if (*scan == '(') {
-				paren++;
-			} else if (*scan == ')') {
-				if (paren) {
-					paren--;
-				}
-			} else if ((*scan == delim) && !paren) {
-				*scan++ = '\0';
-				break;
-			}
-		}
-	}
-
-	if (*scan) {
-		array[argc++] = scan;
-	}
-	return argc;
-}
-#endif
 
 /*!
  * \brief Handle Feature Change Event for persistent feature storage
@@ -558,13 +450,6 @@ boolean_t __PURE__ sccp_util_matchSubscriptionId(constChannelPtr channel, const 
 		   (0 != strncasecmp(channel->subscriptionId.number, subscriptionIdNum, sccp_strlen(channel->subscriptionId.number)))) {	/* Do the match! */
 		result = FALSE;
 	}
-#if 0
-	pbx_log(LOG_NOTICE, "sccp_channel->subscriptionId.number=%s, length=%d\n", channel->subscriptionId.number, sccp_strlen(channel->subscriptionId.number));
-	pbx_log(LOG_NOTICE, "subscriptionIdNum=%s, length=%d\n", subscriptionIdNum ? subscriptionIdNum : "NULL", subscriptionIdNum ? sccp_strlen(subscriptionIdNum) : -1);
-
-	pbx_log(LOG_NOTICE, "sccp_util_matchSubscriptionId: sccp_channel->subscriptionId.number=%s, SubscriptionId=%s\n", (channel->subscriptionId.number) ? channel->subscriptionId.number : "NULL", (subscriptionIdNum) ? subscriptionIdNum : "NULL");
-	pbx_log(LOG_NOTICE, "sccp_util_matchSubscriptionId: result: %d\n", result);
-#endif
 	return result;
 }
 
@@ -1366,42 +1251,6 @@ void sccp_print_group(struct ast_str *buf, int buflen, sccp_group_t group)
 	}
 }
 
-#if 0
-/*!
- * \brief Compare two socket addressed with each other
- *
- * \note not used
- */
-int sockaddr_cmp_addr(struct sockaddr_storage *addr1, socklen_t len1, struct sockaddr_storage *addr2, socklen_t len2)
-{
-	struct sockaddr_in *p1_in = (struct sockaddr_in *) addr1;
-	struct sockaddr_in *p2_in = (struct sockaddr_in *) addr2;
-	struct sockaddr_in6 *p1_in6 = (struct sockaddr_in6 *) addr1;
-	struct sockaddr_in6 *p2_in6 = (struct sockaddr_in6 *) addr2;
-
-	if (len1 < len2) {
-		return -1;
-	}
-	if (len1 > len2) {
-		return 1;
-	}
-	if (p1_in->sin_family < p2_in->sin_family) {
-		return -1;
-	}
-	if (p1_in->sin_family > p2_in->sin_family) {
-		return 1;
-	}
-	/* compare ip4 */
-	if (p1_in->sin_family == AF_INET) {
-		return memcmp(&p1_in->sin_addr, &p2_in->sin_addr, sizeof(p1_in->sin_addr));
-	} else if (p1_in6->sin6_family == AF_INET6) {
-		return memcmp(&p1_in6->sin6_addr, &p2_in6->sin6_addr, sizeof(p1_in6->sin6_addr));
-	} else {
-		/* unknown type, compare for sanity. */
-		return memcmp(addr1, addr2, len1);
-	}
-}
-#endif
 
 int __PURE__ sccp_strversioncmp(const char *s1, const char *s2)
 {
@@ -1732,162 +1581,6 @@ static void __attribute__((destructor)) sccp_unregister_tests(void)
 #		elif HAVE_DECL_BFD_SECTION_FLAGS
 #			define ucs_debug_bfd_section_flags(_abfd, _section) bfd_section_flags(_section)
 #		endif
-#		if ASTERISK_VERSION_GROUP < 112
-#			if HAVE_EXECINFO_H
-static char **__sccp_bt_get_symbols(void **addresses, size_t num_frames)
-{
-	char ** strings = NULL;
-#			if defined(HAVE_DLADDR_H) && defined(HAVE_BFD_H)
-	size_t stackfr;
-	bfd * bfdobj = NULL;    /* bfd.h */
-	Dl_info dli;		/* dlfcn.h */
-	long allocsize;
-	asymbol **syms = NULL;	/* bfd.h */
-	bfd_vma offset;		/* bfd.h */
-	const char * lastslash = NULL;
-	asection * section = NULL;
-	const char *file, *func;
-	unsigned int line;
-	char address_str[128];
-	char msg[1024];
-	size_t strings_size;
-	size_t * eachlen = NULL;
-
-	strings_size = num_frames * sizeof(*strings);
-
-	eachlen = (size_t *) sccp_calloc(sizeof *eachlen, num_frames);
-	strings = (char **) sccp_calloc(sizeof *strings, num_frames);
-	if (!eachlen || !strings) {
-		pbx_log(LOG_ERROR, SS_Memory_Allocation_Error, "SCCP");
-		sccp_free(eachlen);
-		sccp_free(strings);
-		return NULL;
-	}
-
-	for (stackfr = 0; stackfr < num_frames; stackfr++) {
-		int found = 0, symbolcount;
-
-		msg[0] = '\0';
-
-		if (!dladdr(addresses[stackfr], &dli)) {
-			continue;
-		}
-
-		if (strcmp(dli.dli_fname, "asterisk") == 0) {
-			char asteriskpath[256];
-
-			if (!(dli.dli_fname = ast_utils_which("asterisk", asteriskpath, sizeof(asteriskpath)))) {
-				/* This will fail to find symbols */
-				dli.dli_fname = "asterisk";
-			}
-		}
-
-		lastslash = strrchr(dli.dli_fname, '/');
-		if ((bfdobj = bfd_openr(dli.dli_fname, NULL)) &&
-			bfd_check_format(bfdobj, bfd_object) &&
-			(allocsize = bfd_get_symtab_upper_bound(bfdobj)) > 0 &&
-			(syms = (asymbol **)sccp_malloc(allocsize)) &&
-			(symbolcount = bfd_canonicalize_symtab(bfdobj, syms))) {
-
-			if (bfdobj->flags & DYNAMIC) {
-				offset = addresses[stackfr] - dli.dli_fbase;
-			} else {
-				offset = addresses[stackfr] - (void *) 0;
-			}
-
-			for (section = bfdobj->sections; section; section = section->next) {
-				if (!(ucs_debug_bfd_section_flags(bfdobj, section) & SEC_ALLOC) || section->vma > offset || section->size + section->vma < offset) {
-					continue;
-				}
-
-				if (!bfd_find_nearest_line(bfdobj, section, syms, offset - section->vma, &file, &func, &line)) {
-					continue;
-				}
-
-				/* file can possibly be null even with a success result from bfd_find_nearest_line */
-				file = file ? file : "";
-
-				/* Stack trace output */
-				found++;
-				if ((lastslash = strrchr(file, '/'))) {
-					const char * prevslash = NULL;
-
-					for (prevslash = lastslash - 1; *prevslash != '/' && prevslash >= file; prevslash--) {
-					}
-					if (prevslash >= file) {
-						lastslash = prevslash;
-					}
-				}
-				if (dli.dli_saddr == NULL) {
-					address_str[0] = '\0';
-				} else {
-					snprintf(address_str, sizeof(address_str), " (%p+%lX)",
-						dli.dli_saddr,
-						(unsigned long) (addresses[stackfr] - dli.dli_saddr));
-				}
-				snprintf(msg, sizeof(msg), "%s:%u %s()%s",
-					lastslash ? lastslash + 1 : file, line,
-					S_OR(func, "???"),
-					address_str);
-
-				break; /* out of section iteration */
-			}
-		}
-		if (bfdobj) {
-			bfd_close(bfdobj);
-		}
-		if (syms) {
-			sccp_free(syms);
-		}
-
-		/* Default output, if we cannot find the information within BFD */
-		if (!found) {
-			if (dli.dli_saddr == NULL) {
-				address_str[0] = '\0';
-			} else {
-				snprintf(address_str, sizeof(address_str), " (%p+%lX)",
-					dli.dli_saddr,
-					(unsigned long) (addresses[stackfr] - dli.dli_saddr));
-			}
-			snprintf(msg, sizeof(msg), "%s %s()%s",
-				lastslash ? lastslash + 1 : dli.dli_fname,
-				S_OR(dli.dli_sname, "<unknown>"),
-				address_str);
-		}
-
-		if (!ast_strlen_zero(msg)) {
-			char ** tmp = NULL;
-
-			eachlen[stackfr] = strlen(msg) + 1;
-			if (!(tmp = (char **)sccp_realloc(strings, strings_size + eachlen[stackfr]))) {
-				pbx_log(LOG_ERROR, SS_Memory_Allocation_Error, "SCCP");
-				sccp_free(strings);
-				strings = NULL;
-				break; /* out of stack frame iteration */
-			}
-			strings = tmp;
-			strings[stackfr] = (char *) strings + strings_size;
-			//__strcpy(strings[stackfr], msg);/* Safe since we just allocated the room. */
-			sccp_copy_string(strings[stackfr], msg, strings_size + eachlen[stackfr]);
-			strings_size += eachlen[stackfr];
-		}
-	}
-
-	if (strings) {
-		/* Recalculate the offset pointers because of the reallocs. */
-		strings[0] = (char *) strings + num_frames * sizeof(*strings);
-		for (stackfr = 1; stackfr < num_frames; stackfr++) {
-			strings[stackfr] = strings[stackfr - 1] + eachlen[stackfr - 1];
-		}
-	}
-	sccp_free(eachlen);
-#else
-	strings = backtrace_symbols(addresses, num_frames);
-#endif  // defined(HAVE_DLADDR_H) && defined(HAVE_BFD_H)
-	return strings;
-}
-#endif  // HAVE_EXECINFO_H
-#endif	// ASTERISK_VERSION_GROUP
 
 void sccp_do_backtrace()
 {
@@ -1916,20 +1609,12 @@ void sccp_do_backtrace()
 #endif		
 	pbx_str_append(&btbuf, DEFAULT_PBX_STR_BUFFERSIZE, "--------------------------------------------------------------------------(bt)--\n");
 	size = backtrace(addresses, SCCP_BACKTRACE_SIZE);
-#if ASTERISK_VERSION_GROUP >= 112 
 	strings = ast_bt_get_symbols(addresses, size);
-#else
-	strings = __sccp_bt_get_symbols(addresses, size);
-#endif
 
 	if (strings) {
 		for (i = 1; i < size; i++) {
-#ifdef CS_AST_BACKTRACE_VECTOR_STRING
 			//struct ast_vector_string * strings;
 			pbx_str_append(&btbuf, DEFAULT_PBX_STR_BUFFERSIZE, " (bt) > %s\n", AST_VECTOR_GET(strings, i));
-#else
-			pbx_str_append(&btbuf, DEFAULT_PBX_STR_BUFFERSIZE, " (bt) > %s\n", strings[i]);
-#endif			
 		}
 		bt_free(strings);
 

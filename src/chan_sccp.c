@@ -53,9 +53,6 @@ static PBX_FRAME_TYPE sccp_null_frame;										/*!< Asterisk Structure */
 int load_config(void)
 {
 	/* Setup the monitor thread default */
-#if ASTERISK_VERSION_GROUP < 110
-	GLOB(monitor_thread) = AST_PTHREADT_NULL;								// ADDED IN SVN 414 -FS
-#endif
 	GLOB(mwiMonitorThread) = AST_PTHREADT_NULL;
 
 	memset(&GLOB(bindaddr), 0, sizeof(GLOB(bindaddr)));
@@ -105,9 +102,6 @@ boolean_t sccp_prePBXLoad(void)
 	pbx_rwlock_init(&GLOB(lock));
 #ifndef SCCP_ATOMIC	
 	pbx_mutex_init(&GLOB(usecnt_lock));
-#endif
-#if ASTERISK_VERSION_GROUP < 110
-	pbx_mutex_init(&GLOB(monitor_lock));
 #endif
 
 	/* init refcount */
@@ -165,9 +159,6 @@ boolean_t sccp_prePBXLoad(void)
 	GLOB(privacy) = TRUE;											/* permit private function */
 	GLOB(mwilamp) = SKINNY_LAMP_ON;
 	GLOB(ringtype) = SKINNY_RINGTYPE_OUTSIDE;
-	#if 0
-	GLOB(protocolversion) = SCCP_DRIVER_SUPPORTED_PROTOCOL_HIGH;
-	#endif
 	GLOB(amaflags) = pbx_channel_string2amaflag("documentation");
 	GLOB(callanswerorder) = SCCP_ANSWER_OLDEST_FIRST;
 	GLOB(earlyrtp) = TRUE;
@@ -175,9 +166,7 @@ boolean_t sccp_prePBXLoad(void)
 	if (GLOB(global_jbconf)) {
 		GLOB(global_jbconf)->max_size = -1;
 		GLOB(global_jbconf)->resync_threshold = -1;
-#ifdef CS_AST_JB_TARGETEXTRA
 		GLOB(global_jbconf)->target_extra = -1;
-#endif
 	}
 	sccp_create_hotline();
 	return TRUE;

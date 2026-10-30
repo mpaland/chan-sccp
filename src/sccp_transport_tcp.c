@@ -24,7 +24,6 @@ SCCP_FILE_VERSION(__FILE__, "");
 /* forward declares */
 const sccp_transport_t tcptransport;
 
-#if 1 /*CS_SCCP_TCP*/
 const sccp_transport_t * const tcp_init(void)
 {
 	return &tcptransport;
@@ -94,10 +93,4 @@ const sccp_transport_t tcptransport = {
 	.destroy  = tcp_destroy,
 };
 
-#else
-const sccp_transport_t * const tcp_init(uint8_t h)
-{
-	return NULL;
-}
-#endif
 // kate: indent-width 8; replace-tabs off; indent-mode cstyle; auto-insert-doxygen on; line-numbers on; tab-indents on; keep-extra-spaces off; auto-brackets off;

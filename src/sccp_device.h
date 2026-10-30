@@ -310,9 +310,7 @@ struct sccp_device {
 	boolean_t useRedialMenu;
 	
 	uint32_t  rtpPort;
-#ifdef CS_AST_HAS_STASIS_ENDPOINT
 	PBX_ENDPOINT_TYPE *endpoint;
-#endif
 	struct sockaddr_storage ipv4;
 	struct sockaddr_storage ipv6;
 

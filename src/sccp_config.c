@@ -208,13 +208,8 @@
 SCCP_FILE_VERSION(__FILE__, "");
 
 #include <asterisk/paths.h>
-#if defined(CS_AST_HAS_EVENT) && defined(HAVE_PBX_EVENT_H) && (defined(CS_DEVICESTATE) || defined(CS_CACHEABLE_DEVICESTATE))                                        // ast_event_subscribe
-#	include <asterisk/event.h>
-#endif
 
-#ifdef HAVE_PBX_APP_H
 #	include <asterisk/app.h>                                        // AST_DECLARE_APP_ARGS / AST_STANDARD_APP_ARGS
-#endif
 
 #ifndef offsetof
 #	if defined(__GNUC__) && __GNUC__ > 3
@@ -1037,12 +1032,6 @@ sccp_value_changed_t sccp_config_parse_ipaddress(void * const dest, const size_t
 	sccp_value_changed_t changed = SCCP_CONFIG_CHANGE_NOCHANGE;
 	char *               value   = pbx_strdupa(v->value);
 
-#if ASTERISK_VERSION_GROUP == 106
-	if (sccp_strequals(value, "::")) {
-		pbx_log(LOG_ERROR, "Asterisk 1.6, does not support ipv6, '::' has been replaced with '0.0.0.0'\n");
-		value = pbx_strdupa("::");
-	}
-#endif
 	if (sccp_strlen_zero(value)) {
 		value = pbx_strdupa("0.0.0.0");
 	}
@@ -3371,9 +3360,7 @@ int sccp_manager_config_metadata(struct mansession * s, const struct message * m
 #ifdef CS_MANAGER_EVENTS
 			"manager_events",
 #endif
-#ifdef CS_DEVICESTATE
 			"devicestate",
-#endif
 #ifdef CS_DEVSTATE_FEATURE
 			"devstate_feature",
 #endif

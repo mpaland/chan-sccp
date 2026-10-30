@@ -26,9 +26,7 @@ SCCP_FILE_VERSION(__FILE__, "");
 
 #include <asterisk/callerid.h>
 #include <asterisk/module.h>                                        // ast_register_application2
-#ifdef HAVE_PBX_APP_H
 #	include <asterisk/app.h>
-#endif
 
 /*** DOCUMENTATION
         <function name="SCCPDevice" language="en_US">
@@ -734,7 +732,6 @@ static int sccp_func_sccpline(PBX_CHANNEL_TYPE * chan, NEWCONST char * cmd, char
 #else
 				sccp_copy_string(buf, "not supported", len);
 #endif
-#ifdef CS_AST_HAS_NAMEDGROUP
 			} else if (!strcasecmp(token, "named_callgroup")) {
 #	ifdef CS_SCCP_PICKUP
 				ast_copy_string(buf, l->namedcallgroup, len);
@@ -747,7 +744,6 @@ static int sccp_func_sccpline(PBX_CHANNEL_TYPE * chan, NEWCONST char * cmd, char
 #	else
 				sccp_copy_string(buf, "not supported", len);
 #	endif
-#endif
 			} else if (!strcasecmp(token, "codecs")) {
 				sccp_codec_multiple2str(buf, buf_len - 1, l->preferences.audio, ARRAY_LEN(l->preferences.audio));
 			} else if (!strcasecmp(token, "capability")) {
@@ -1082,11 +1078,7 @@ static struct pbx_custom_function sccpchannel_function = {
  * \called_from_asterisk
  * \deprecated
  */
-#if ASTERISK_VERSION_NUMBER >= 10800
 static int sccp_app_prefcodec(PBX_CHANNEL_TYPE * chan, const char * data)
-#else
-static int sccp_app_prefcodec(PBX_CHANNEL_TYPE * chan, void * data)
-#endif
 {
 	AUTO_RELEASE(sccp_channel_t, c, get_sccp_channel_from_pbx_channel(chan));
 	int res = 0;
@@ -1111,11 +1103,7 @@ static char * prefcodec_name = "SCCPSetCodec";
  * \called_from_asterisk
  * \deprecated
  */
-#if ASTERISK_VERSION_NUMBER >= 10800
 static int sccp_app_calledparty(PBX_CHANNEL_TYPE * chan, const char * data)
-#else
-static int sccp_app_calledparty(PBX_CHANNEL_TYPE * chan, void * data)
-#endif
 {
 	char * text = (char *)data;
 	char * num  = NULL;
@@ -1154,11 +1142,7 @@ static char * calledparty_name = "SCCPSetCalledParty";
  *
  * \called_from_asterisk
  */
-#if ASTERISK_VERSION_NUMBER >= 10800
 static int sccp_app_setmessage(PBX_CHANNEL_TYPE * chan, const char * data)
-#else
-static int sccp_app_setmessage(PBX_CHANNEL_TYPE * chan, void * data)
-#endif
 {
 	AUTO_RELEASE(sccp_channel_t, c, get_sccp_channel_from_pbx_channel(chan));
 	if (!c) {
