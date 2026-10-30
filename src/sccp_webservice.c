@@ -457,6 +457,9 @@ static int sccp_webservice_callback(struct ast_tcptls_session_instance * ser, co
 		ast_sockaddr_copy(&ser_remote_address_tmp, &ser->remote_address);
 		retval = request_parser(ser, method, uri, params, headers);
 		ast_sockaddr_copy(&ser->remote_address, &ser_remote_address_tmp);
+		if (method == AST_HTTP_POST && params) {
+			ast_variables_destroy(params);                                        /* ast_http_get_post_vars() allocates a new list */
+		}
 	}
 	return retval;
 }

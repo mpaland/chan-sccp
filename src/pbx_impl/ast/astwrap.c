@@ -1131,6 +1131,23 @@ static void __sccp_astwrap_updateConnectedLine(PBX_CHANNEL_TYPE *pbx_channel, co
 	}
 }
 
+/*!
+ * \brief Abort the creation of a pbx channel that is still locked and snapshot-staged (as returned by ast_channel_alloc).
+ * The sccp channel reference stored in tech_pvt is dropped here, so the hangup callback does not run the full sccp hangup
+ * sequence for a channel that never existed from the point of view of the rest of chan-sccp.
+ */
+static void sccp_astwrap_abortPBXChannel(PBX_CHANNEL_TYPE * pbxDstChannel)
+{
+	sccp_channel_t * pvt = CS_AST_CHANNEL_PVT(pbxDstChannel);
+	ast_channel_tech_pvt_set(pbxDstChannel, NULL);
+	if (pvt) {
+		sccp_channel_release(&pvt);                                        /* explicit release of the tech_pvt reference */
+	}
+	ast_channel_stage_snapshot_done(pbxDstChannel);
+	ast_channel_unlock(pbxDstChannel);                                        /* ast_channel_alloc returned it locked */
+	ast_hangup(pbxDstChannel);                                                /* consumes the allocation reference */
+}
+
 static boolean_t sccp_astwrap_allocPBXChannel(sccp_channel_t * channel, const void *ids, const PBX_CHANNEL_TYPE * pbxSrcChannel, PBX_CHANNEL_TYPE ** _pbxDstChannel)
 {
 	const struct ast_assigned_ids *assignedids = NULL;
@@ -1179,8 +1196,8 @@ static boolean_t sccp_astwrap_allocPBXChannel(sccp_channel_t * channel, const vo
 #endif
 	struct ast_format_cap *joint = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
 	if (!joint) {
-		ao2_cleanup(pbxDstChannel);
 		ao2_cleanup(caps);
+		sccp_astwrap_abortPBXChannel(pbxDstChannel);
 		return FALSE;
 	}
 	struct ast_format_cap *what = NULL;
@@ -1210,8 +1227,8 @@ static boolean_t sccp_astwrap_allocPBXChannel(sccp_channel_t * channel, const vo
 		if (!fmt) {
 			ast_log(LOG_WARNING, "No compatible formats could be found for %s\n", ast_channel_name(pbxDstChannel));
 			ao2_cleanup(caps);
-			ast_channel_stage_snapshot_done(pbxDstChannel);
-			ast_hangup(pbxDstChannel);
+			ao2_cleanup(joint);
+			sccp_astwrap_abortPBXChannel(pbxDstChannel);
 			return FALSE;
 		}
 	}
@@ -1260,11 +1277,15 @@ static boolean_t sccp_astwrap_allocPBXChannel(sccp_channel_t * channel, const vo
 		ast_channel_pickupgroup_set(pbxDstChannel, line->pickupgroup);
 	}
 	if (!sccp_strlen_zero(line->namedcallgroup)) {
-		ast_channel_named_callgroups_set(pbxDstChannel, ast_get_namedgroups(line->namedcallgroup));
+		struct ast_namedgroups * ncg = ast_get_namedgroups(line->namedcallgroup);
+		ast_channel_named_callgroups_set(pbxDstChannel, ncg);
+		ast_unref_namedgroups(ncg);
 	}
 
 	if (!sccp_strlen_zero(line->namedpickupgroup)) {
-		ast_channel_named_pickupgroups_set(pbxDstChannel, ast_get_namedgroups(line->namedpickupgroup));
+		struct ast_namedgroups * npg = ast_get_namedgroups(line->namedpickupgroup);
+		ast_channel_named_pickupgroups_set(pbxDstChannel, npg);
+		ast_unref_namedgroups(npg);
 	}
 #endif
 	if (!sccp_strlen_zero(line->parkinglot)) {
@@ -1272,8 +1293,11 @@ static boolean_t sccp_astwrap_allocPBXChannel(sccp_channel_t * channel, const vo
 	}
 
 	/** the the tonezone using language information */
-	if (!sccp_strlen_zero(line->language) && ast_get_indication_zone(line->language)) {
-		ast_channel_zone_set(pbxDstChannel, ast_get_indication_zone(line->language));			/* this will core asterisk on hangup */
+	if (!sccp_strlen_zero(line->language)) {
+		struct ast_tone_zone * zone = ast_get_indication_zone(line->language);                                        /* returns a reference, owned by the channel from now on */
+		if (zone) {
+			ast_channel_zone_set(pbxDstChannel, zone);
+		}
 	}
 
 	ast_channel_stage_snapshot_done(pbxDstChannel);
@@ -1435,8 +1459,7 @@ int sccp_astwrap_hangup(PBX_CHANNEL_TYPE * ast_channel)
 		sccp_mutex_unlock(&c->lock);
 		ast_channel_tech_pvt_set(ast_channel, NULL);
 	} else {												// after this moment c might have gone already
-		ast_channel_tech_pvt_set(ast_channel, NULL);
-		pbx_channel_unref(ast_channel);									// strange unknown channel, why did we get called to hang it up ?
+		ast_channel_tech_pvt_set(ast_channel, NULL);                                        /* no sccp channel attached (any more): nothing to release here, asterisk owns the channel */
 	}
 	return res;
 }
