@@ -1,0 +1,31 @@
+name: Release Please
+
+# Maintains a release pull request on develop from the conventional commit messages
+# (fix:, feat:, refactor:, build:, docs:, ...). Merging that pull request bumps .version,
+# updates CHANGELOG.md, tags vX.Y.Z and publishes the GitHub release.
+#
+# Repository settings required once: Settings -> Actions -> General -> Workflow permissions:
+# "Read and write permissions" and "Allow GitHub Actions to create and approve pull requests".
+#
+# Optional: a fine-grained personal access token (contents + pull requests: write) stored as the
+# RELEASE_PLEASE_TOKEN secret. Pull requests and releases created with the default GITHUB_TOKEN
+# do not trigger other workflows, so the CI and CodeQL checks would not run on the release PR.
+
+on:
+  push:
+    branches: [develop]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v5
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          target-branch: develop
