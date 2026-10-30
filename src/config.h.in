@@ -18,61 +18,14 @@
 /* using IAX */
 #undef AIX
 
-/* Defined AO_REQUIRE_CAS */
-#undef AO_REQUIRE_CAS
-
-/* NOT Defined ASTERISK_CONF !! */
-#undef ASTERISK_CONF
-
-/* Defined ASTERISK_CONF_1_10 */
-#undef ASTERISK_CONF_1_10
-
-/* Defined ASTERISK_CONF_1_11 */
-#undef ASTERISK_CONF_1_11
-
-/* Defined ASTERISK_CONF_1_12 */
-#undef ASTERISK_CONF_1_12
-
-/* Defined ASTERISK_CONF_1_13 */
-#undef ASTERISK_CONF_1_13
-
-/* Defined ASTERISK_CONF_1_14 */
-#undef ASTERISK_CONF_1_14
-
-/* Defined ASTERISK_CONF_1_15 */
-#undef ASTERISK_CONF_1_15
-
-/* Defined ASTERISK_CONF_1_16 */
-#undef ASTERISK_CONF_1_16
-
-/* Defined ASTERISK_CONF_1_17 */
-#undef ASTERISK_CONF_1_17
-
-/* Defined ASTERISK_CONF_1_18 */
-#undef ASTERISK_CONF_1_18
-
-/* Defined ASTERISK_CONF_1_19 */
-#undef ASTERISK_CONF_1_19
-
-/* Defined ASTERISK_CONF_1_2 */
-#undef ASTERISK_CONF_1_2
-
-/* Defined ASTERISK_CONF_1_4 */
-#undef ASTERISK_CONF_1_4
-
-/* Defined ASTERISK_CONF_1_6 */
-#undef ASTERISK_CONF_1_6
-
-/* Defined ASTERISK_CONF_1_8 */
-#undef ASTERISK_CONF_1_8
-
-/* ASTERISK Source Location */
-#undef ASTERISK_REPOS_LOCATION
-
-/* ASTERISK Version Group */
+/* Asterisk version group: 100 + major (e.g. 122) */
 #undef ASTERISK_VERSION_GROUP
 
-/* ASTERISK Version Number */
+/* Asterisk major version (e.g. 22) */
+#undef ASTERISK_VERSION_MAJOR
+
+/* Asterisk version number: 10000 + major * 100 + minor (e.g. 12205), legacy
+   encoding */
 #undef ASTERISK_VERSION_NUMBER
 
 /* using BSD */
@@ -107,157 +60,6 @@
 
 /* astobj2 refcount enabled */
 #undef CS_ASTOBJ_REFCOUNT
-
-/* Found 'ast_bt_free_symbols' in asterisk/backtrace.h */
-#undef CS_AST_BACKTRACE_VECTOR_STRING
-
-/* Found 'ast_cel_linkedid_ref' in asterisk/cel.h */
-#undef CS_AST_CEL_LINKEDID_REF
-
-/* 'ast_channel_callid' returns struct */
-#undef CS_AST_CHANNEL_CALLID_TYPEDEF
-
-/* 'struct ast_callerid' available */
-#undef CS_AST_CHANNEL_HAS_CID
-
-/* 'defined channel pvt' */
-#undef CS_AST_CHANNEL_PVT
-
-/* 'defined cmp_type' */
-#undef CS_AST_CHANNEL_PVT_CMP_TYPE
-
-/* 'defined pvt_is_sccp' */
-#undef CS_AST_CHANNEL_PVT_IS_SCCP
-
-/* 'defined channel_pvt_type' */
-#undef CS_AST_CHANNEL_PVT_TYPE
-
-/* 'AST_CONTROL_INCOMPLETE' available */
-#undef CS_AST_CONTROL_INCOMPLETE
-
-/* 'AST_CONTROL_REDIRECTING' available */
-#undef CS_AST_CONTROL_REDIRECTING
-
-/* 'AST_DEVICE_RINGING' available */
-#undef CS_AST_DEVICE_RINGING
-
-/* Found 'ast_do_pickup' in asterisk/features.h */
-#undef CS_AST_DO_PICKUP
-
-/* Found 'ast_enable_distributed_devstate' in asterisk/devicestate.h */
-#undef CS_AST_ENABLE_DISTRIBUTED_DEVSTATE
-
-/* 'struct ast_ha' available */
-#undef CS_AST_HA
-
-/* 'ast_app_separate_args' available */
-#undef CS_AST_HAS_APP_SEPARATE_ARGS
-
-/* Found 'ast_string_field_' in asterisk */
-#undef CS_AST_HAS_AST_STRING_FIELD
-
-/* 'ast_bridged_channel' available */
-#undef CS_AST_HAS_BRIDGED_CHANNEL
-
-/* 'ast_channel_bridge_peer' available */
-#undef CS_AST_HAS_CHANNEL_BRIDGE_PEER
-
-/* 'ast_channel_get_bridge_channel' available */
-#undef CS_AST_HAS_CHANNEL_GET_BRIDGE_CHANNEL
-
-/* 'AST_CONTEXT_DESTROY_BY_NAME' available */
-#undef CS_AST_HAS_CONTEXT_DESTROY_BY_NAME
-
-/* Found 'asterisk/endian.h' */
-#undef CS_AST_HAS_ENDIAN
-
-/* 'ast_event_subscribe' available */
-#undef CS_AST_HAS_EVENT
-
-/* 'AST_EXTENSION_ONHOLD' available */
-#undef CS_AST_HAS_EXTENSION_ONHOLD
-
-/* 'AST_EXTENSION_RINGING' available */
-#undef CS_AST_HAS_EXTENSION_RINGING
-
-/* 'AST_EXTENSION_STATE_CB_TYPE_CHAR' available */
-#undef CS_AST_HAS_EXTENSION_STATE_CB_TYPE_CHAR
-
-/* 'AST_EXTENSION_STATE_CB_TYPE_CONST_CHAR' available */
-#undef CS_AST_HAS_EXTENSION_STATE_CB_TYPE_CONST_CHAR
-
-/* 'AST_FLAG_MOH' available */
-#undef CS_AST_HAS_FLAG_MOH
-
-/* Found 'ast_namedgroups' in asterisk/channel.h */
-#undef CS_AST_HAS_NAMEDGROUP
-
-/* 'ast_get_hint' available */
-#undef CS_AST_HAS_NEW_HINT
-
-/* 'ast_app_has_voicemail' available */
-#undef CS_AST_HAS_NEW_VOICEMAIL
-
-/* 'stasis_subscribe' available */
-#undef CS_AST_HAS_STASIS
-
-/* 'stasis_endpoint' available */
-#undef CS_AST_HAS_STASIS_ENDPOINT
-
-/* 'stasis_subscription_set_filter' available */
-#undef CS_AST_HAS_STASIS_SUBSCRIPTION_SET_FILTER
-
-/* 'struct ast_channel_tech' available' */
-#undef CS_AST_HAS_TECH_PVT
-
-/* 'CS_AST_JB_TARGETEXTRA' available */
-#undef CS_AST_JB_TARGETEXTRA
-
-/* 'CS_AST_MANAGER_CHECK_ENABLED' available */
-#undef CS_AST_MANAGER_CHECK_ENABLED
-
-/* new frame data.ptr */
-#undef CS_AST_NEW_FRAME_STRUCT
-
-/* 'CS_AST_REGISTER_FILE_VERSION' available */
-#undef CS_AST_REGISTER_FILE_VERSION
-
-/* 'ast_rtp_change_source' available */
-#undef CS_AST_RTP_CHANGE_SOURCE
-
-/* Found 'ast_rtp_instance_bridge' in asterisk/bridging.h */
-#undef CS_AST_RTP_INSTANCE_BRIDGE
-
-/* 'ast_rtp_new_source' available */
-#undef CS_AST_RTP_NEW_SOURCE
-
-/* Found 'asterisk/sched.h' */
-#undef CS_AST_SCHED_CONTEXT
-
-/* 'AST_SCHED_DEL' available */
-#undef CS_AST_SCHED_DEL
-
-/* 'AST_XML_DOCS' available */
-#undef CS_AST_XML_DOCS
-
-/* Found 'ast_bridge_base_new' in asterisk/bridging.h */
-#undef CS_BRIDGE_BASE_NEW
-
-/* Found 'AST_BRIDGE_CAPABILITY_MULTITHREADED' in asterisk/bridging.h */
-#undef CS_BRIDGE_CAPABILITY_MULTITHREADED
-
-/* 'ast_bridge_depart' only needs channel reference in asterisk/bridging.h */
-#undef CS_BRIDGE_DEPART_ONLY_CHANNEL
-
-/* Found 'pass_reference' in definition of ast_bridge_join' in
-   asterisk/bridging.h */
-#undef CS_BRIDGE_JOIN_PASSREFERENCE
-
-/* 'cacheable ast_devstate_changed' available */
-#undef CS_CACHEABLE_DEVICESTATE
-
-/* 'ast_devstate_changed' available */
-#undef CS_DEVICESTATE
 
 /* devstate feature enabled */
 #undef CS_DEVSTATE_FEATURE
@@ -313,9 +115,6 @@
 /* Using streaming video */
 #undef CS_SCCP_VIDEO
 
-/* Found 'asterisk/sched.h' */
-#undef CS_SCHED_CONTEXT
-
 /* asterisk compiled with 'TEST_FRAMEWORK' */
 #undef CS_TEST_FRAMEWORK
 
@@ -343,28 +142,28 @@
 /* Define if pointers to integers require aligned access */
 #undef HAVE_ALIGNED_ACCESS_REQUIRED
 
-/* Define to 1 if you have the `argz_add' function. */
+/* Define to 1 if you have the 'argz_add' function. */
 #undef HAVE_ARGZ_ADD
 
-/* Define to 1 if you have the `argz_append' function. */
+/* Define to 1 if you have the 'argz_append' function. */
 #undef HAVE_ARGZ_APPEND
 
-/* Define to 1 if you have the `argz_count' function. */
+/* Define to 1 if you have the 'argz_count' function. */
 #undef HAVE_ARGZ_COUNT
 
-/* Define to 1 if you have the `argz_create_sep' function. */
+/* Define to 1 if you have the 'argz_create_sep' function. */
 #undef HAVE_ARGZ_CREATE_SEP
 
 /* Define to 1 if you have the <argz.h> header file. */
 #undef HAVE_ARGZ_H
 
-/* Define to 1 if you have the `argz_insert' function. */
+/* Define to 1 if you have the 'argz_insert' function. */
 #undef HAVE_ARGZ_INSERT
 
-/* Define to 1 if you have the `argz_next' function. */
+/* Define to 1 if you have the 'argz_next' function. */
 #undef HAVE_ARGZ_NEXT
 
-/* Define to 1 if you have the `argz_stringify' function. */
+/* Define to 1 if you have the 'argz_stringify' function. */
 #undef HAVE_ARGZ_STRINGIFY
 
 /* Define to 1 if you have the <assert.h> header file. */
@@ -373,52 +172,96 @@
 /* Uses Asterisk as PBX */
 #undef HAVE_ASTERISK
 
-/* Define to 1 if you have the <atomic_ops.h> header file. */
-#undef HAVE_ATOMIC_OPS_H
+/* Define to 1 if you have the <asterisk/autoconfig.h> header file. */
+#undef HAVE_ASTERISK_AUTOCONFIG_H
+
+/* Define to 1 if you have the <asterisk/backtrace.h> header file. */
+#undef HAVE_ASTERISK_BACKTRACE_H
+
+/* Define to 1 if you have the <asterisk/bridge.h> header file. */
+#undef HAVE_ASTERISK_BRIDGE_H
+
+/* Define to 1 if you have the <asterisk/buildopts.h> header file. */
+#undef HAVE_ASTERISK_BUILDOPTS_H
+
+/* Define to 1 if you have the <asterisk/channel.h> header file. */
+#undef HAVE_ASTERISK_CHANNEL_H
+
+/* Define to 1 if you have the <asterisk/format_cache.h> header file. */
+#undef HAVE_ASTERISK_FORMAT_CACHE_H
+
+/* Define to 1 if you have the <asterisk.h> header file. */
+#undef HAVE_ASTERISK_H
+
+/* Define to 1 if you have the <asterisk/http.h> header file. */
+#undef HAVE_ASTERISK_HTTP_H
+
+/* Define to 1 if you have the <asterisk/lock.h> header file. */
+#undef HAVE_ASTERISK_LOCK_H
+
+/* Define to 1 if you have the <asterisk/manager.h> header file. */
+#undef HAVE_ASTERISK_MANAGER_H
+
+/* Define to 1 if you have the <asterisk/mwi.h> header file. */
+#undef HAVE_ASTERISK_MWI_H
+
+/* Define to 1 if you have the <asterisk/parking.h> header file. */
+#undef HAVE_ASTERISK_PARKING_H
+
+/* Define to 1 if you have the <asterisk/pbx.h> header file. */
+#undef HAVE_ASTERISK_PBX_H
+
+/* Define to 1 if you have the <asterisk/pickup.h> header file. */
+#undef HAVE_ASTERISK_PICKUP_H
+
+/* Define to 1 if you have the <asterisk/rtp_engine.h> header file. */
+#undef HAVE_ASTERISK_RTP_ENGINE_H
+
+/* Define to 1 if you have the <asterisk/stasis.h> header file. */
+#undef HAVE_ASTERISK_STASIS_H
+
+/* Define to 1 if you have the <asterisk/vector.h> header file. */
+#undef HAVE_ASTERISK_VECTOR_H
 
 /* Found 'bfd.h' */
 #undef HAVE_BFD_H
 
-/* defined 'HAVE_BKTR' */
+/* asterisk compiled with backtrace support */
 #undef HAVE_BKTR
 
 /* Uses Callweaver as PBX */
 #undef HAVE_CALLWEAVER
 
-/* Define to 1 if you have the `closedir' function. */
+/* Define to 1 if you have the 'closedir' function. */
 #undef HAVE_CLOSEDIR
 
-/* if the compiler and cpu can both handle the 128-bit CMPXCHG16B instruction
-   */
-#undef HAVE_CMPXCHG16B
-
-/* Define to 1 if you have the `cplus_demangle' function. */
+/* Define to 1 if you have the 'cplus_demangle' function. */
 #undef HAVE_CPLUS_DEMANGLE
 
 /* Define to 1 if you have the <ctype.h> header file. */
 #undef HAVE_CTYPE_H
 
-/* Define to 1 if you have the declaration of `bfd_get_section_flags', and to
+/* Define to 1 if you have the declaration of 'bfd_get_section_flags', and to
    0 if you don't. */
 #undef HAVE_DECL_BFD_GET_SECTION_FLAGS
 
-/* Define to 1 if you have the declaration of `bfd_get_section_vma', and to 0
+/* Define to 1 if you have the declaration of 'bfd_get_section_vma', and to 0
    if you don't. */
 #undef HAVE_DECL_BFD_GET_SECTION_VMA
 
-/* Define to 1 if you have the declaration of `bfd_section_flags', and to 0 if
+/* Define to 1 if you have the declaration of 'bfd_section_flags', and to 0 if
    you don't. */
 #undef HAVE_DECL_BFD_SECTION_FLAGS
 
-/* Define to 1 if you have the declaration of `bfd_section_vma', and to 0 if
+/* Define to 1 if you have the declaration of 'bfd_section_vma', and to 0 if
    you don't. */
 #undef HAVE_DECL_BFD_SECTION_VMA
 
-/* Define to 1 if you have the declaration of `cygwin_conv_path', and to 0 if
+/* Define to 1 if you have the declaration of 'cygwin_conv_path', and to 0 if
    you don't. */
 #undef HAVE_DECL_CYGWIN_CONV_PATH
 
-/* Define to 1 if you have the declaration of `tzname', and to 0 if you don't.
+/* Define to 1 if you have the declaration of 'tzname', and to 0 if you don't.
    */
 #undef HAVE_DECL_TZNAME
 
@@ -437,7 +280,7 @@
 /* Define to 1 if you have the <dld.h> header file. */
 #undef HAVE_DLD_H
 
-/* Define to 1 if you have the `dlerror' function. */
+/* Define to 1 if you have the 'dlerror' function. */
 #undef HAVE_DLERROR
 
 /* Define to 1 if you have the <dlfcn.h> header file. */
@@ -455,7 +298,7 @@
 /* Define to 1 if you have the <errno.h> header file. */
 #undef HAVE_ERRNO_H
 
-/* Define to 1 if the system has the type `error_t'. */
+/* Define to 1 if the system has the type 'error_t'. */
 #undef HAVE_ERROR_T
 
 /* Found 'execinfo.h' */
@@ -464,28 +307,22 @@
 /* Define to 1 if you have the <fcntl.h> header file. */
 #undef HAVE_FCNTL_H
 
-/* Define to 1 if you have the `gethostbyname' function. */
+/* Define to 1 if you have the 'gethostbyname' function. */
 #undef HAVE_GETHOSTBYNAME
-
-/* Define to 1 if you have the <ia32intrin.h> header file. */
-#undef HAVE_IA32INTRIN_H
-
-/* Define to 1 if you have the <ia64intrin.h> header file. */
-#undef HAVE_IA64INTRIN_H
 
 /* Define if you have the iconv() function and it works. */
 #undef HAVE_ICONV
 
-/* Define to 1 if you have the `inet_ntoa' function. */
+/* Define to 1 if you have the 'inet_ntoa' function. */
 #undef HAVE_INET_NTOA
 
 /* Define to 1 if you have the <inttypes.h> header file. */
 #undef HAVE_INTTYPES_H
 
-/* Define to 1 if you have the `c' library (-lc). */
+/* Define to 1 if you have the 'c' library (-lc). */
 #undef HAVE_LIBC
 
-/* Define to 1 if you have the `crypto' library (-lcrypto). */
+/* Define to 1 if you have the 'crypto' library (-lcrypto). */
 #undef HAVE_LIBCRYPTO
 
 /* Define if you have the libdl library or equivalent. */
@@ -509,19 +346,19 @@
 /* Define to 1 if you have the <libexslt/exslt.h> header file. */
 #undef HAVE_LIBEXSLT_EXSLT_H
 
-/* Define to 1 if you have the `iconv' library (-liconv). */
+/* Define to 1 if you have the 'iconv' library (-liconv). */
 #undef HAVE_LIBICONV
 
-/* Define to 1 if you have the `ltdl' library (-lltdl). */
+/* Define to 1 if you have the 'ltdl' library (-lltdl). */
 #undef HAVE_LIBLTDL
 
-/* Define to 1 if you have the `pthread' library (-lpthread). */
+/* Define to 1 if you have the 'pthread' library (-lpthread). */
 #undef HAVE_LIBPTHREAD
 
-/* Define to 1 if you have the `socket' library (-lsocket). */
+/* Define to 1 if you have the 'socket' library (-lsocket). */
 #undef HAVE_LIBSOCKET
 
-/* Define to 1 if you have the `ssl' library (-lssl). */
+/* Define to 1 if you have the 'ssl' library (-lssl). */
 #undef HAVE_LIBSSL
 
 /* Found 'LIBXML2' */
@@ -557,107 +394,17 @@
 /* Define to 1 if you have the <mach-o/dyld.h> header file. */
 #undef HAVE_MACH_O_DYLD_H
 
-/* Define to 1 if you have the <memory.h> header file. */
-#undef HAVE_MEMORY_H
+/* Define to 1 if you have the <minix/config.h> header file. */
+#undef HAVE_MINIX_CONFIG_H
 
-/* Define to 1 if you have the `mkdir' function. */
+/* Define to 1 if you have the 'mkdir' function. */
 #undef HAVE_MKDIR
 
 /* Define to 1 if you have the <netinet/in.h> header file. */
 #undef HAVE_NETINET_IN_H
 
-/* Define to 1 if you have the `opendir' function. */
+/* Define to 1 if you have the 'opendir' function. */
 #undef HAVE_OPENDIR
-
-/* Found 'asterisk/abstract_jb.h' */
-#undef HAVE_PBX_ABSTRACT_JB_H
-
-/* Found 'asterisk/acl.h' */
-#undef HAVE_PBX_ACL_H
-
-/* Found 'asterisk/app.h' */
-#undef HAVE_PBX_APP_H
-
-/* Found 'asterisk/astobj2.h' */
-#undef HAVE_PBX_ASTOBJ2_H
-
-/* Found 'asterisk/backtrace.h' */
-#undef HAVE_PBX_BACKTRACE_H
-
-/* Found 'asterisk/bridging_roles.h' */
-#undef HAVE_PBX_BRIDGING_ROLES_H
-
-/* Found 'asterisk/stringfields.h' */
-#undef HAVE_PBX_CEL_H
-
-/* Found 'asterisk/channel.h' */
-#undef HAVE_PBX_CHANNEL_H
-
-/* Found 'asterisk/channel_pvt.h' */
-#undef HAVE_PBX_CHANNEL_pvt_H
-
-/* Found 'asterisk/devicestate.h' */
-#undef HAVE_PBX_DEVICESTATE_H
-
-/* Found 'asterisk/endian.h' */
-#undef HAVE_PBX_ENDIAN_H
-
-/* Found 'asterisk/event.h' */
-#undef HAVE_PBX_EVENT_H
-
-/* Found 'asterisk/features.h' */
-#undef HAVE_PBX_FEATURES_H
-
-/* Found 'asterisk/frame.h' */
-#undef HAVE_PBX_FRAME_H
-
-/* Found 'asterisk/http.h' */
-#undef HAVE_PBX_HTTP_H
-
-/* Found 'asterisk/linkedlists.h' */
-#undef HAVE_PBX_LINKEDLISTS_H
-
-/* Found 'asterisk/lock.h' */
-#undef HAVE_PBX_LOCK_H
-
-/* Found 'asterisk/manager.h' */
-#undef HAVE_PBX_MANAGER_H
-
-/* 'struct manager_custom_hook' available */
-#undef HAVE_PBX_MANAGER_HOOK_H
-
-/* Found 'asterisk/message.h' */
-#undef HAVE_PBX_MESSAGE_H
-
-/* Found 'asterisk/mwi.h' */
-#undef HAVE_PBX_MWI_H
-
-/* Found 'asterisk/pbx.h' */
-#undef HAVE_PBX_PBX_H
-
-/* Found 'asterisk/rtp_engine.h' */
-#undef HAVE_PBX_RTP_ENGINE_H
-
-/* Found 'asterisk/rtp.h' */
-#undef HAVE_PBX_RTP_H
-
-/* Found 'asterisk/sched.h' */
-#undef HAVE_PBX_SCHED_H
-
-/* Found 'asterisk/stasis_endpoints.h' */
-#undef HAVE_PBX_STASIS_H
-
-/* Found 'asterisk/stringfields.h' */
-#undef HAVE_PBX_STRINGFIELDS_H
-
-/* Found 'asterisk/strings.h' */
-#undef HAVE_PBX_STRINGS_H
-
-/* Found 'asterisk/utils.h' */
-#undef HAVE_PBX_UTILS_H
-
-/* Found 'asterisk/vector.h' */
-#undef HAVE_PBX_VECTOR_H
 
 /* Define if libtool can extract symbol lists from object files. */
 #undef HAVE_PRELOADED_SYMBOLS
@@ -668,7 +415,7 @@
 /* Define to 1 if you have the <pthread.h> header file. */
 #undef HAVE_PTHREAD_H
 
-/* Define to 1 if you have the `readdir' function. */
+/* Define to 1 if you have the 'readdir' function. */
 #undef HAVE_READDIR
 
 /* Define if you have the shl_load function. */
@@ -695,16 +442,16 @@
 /* Define to 1 if you have the <string.h> header file. */
 #undef HAVE_STRING_H
 
-/* Define to 1 if you have the `strlcat' function. */
+/* Define to 1 if you have the 'strlcat' function. */
 #undef HAVE_STRLCAT
 
-/* Define to 1 if you have the `strlcpy' function. */
+/* Define to 1 if you have the 'strlcpy' function. */
 #undef HAVE_STRLCPY
 
-/* Define to 1 if the system has the type `struct dl_phdr_info'. */
+/* Define to 1 if the system has the type 'struct dl_phdr_info'. */
 #undef HAVE_STRUCT_DL_PHDR_INFO
 
-/* Define to 1 if `tm_zone' is a member of `struct tm'. */
+/* Define to 1 if 'tm_zone' is a member of 'struct tm'. */
 #undef HAVE_STRUCT_TM_TM_ZONE
 
 /* Define to 1 if you have the <sys/dl.h> header file. */
@@ -731,12 +478,12 @@
 /* Define to 1 if you have the <sys/types.h> header file. */
 #undef HAVE_SYS_TYPES_H
 
-/* Define to 1 if your `struct tm' has `tm_zone'. Deprecated, use
-   `HAVE_STRUCT_TM_TM_ZONE' instead. */
+/* Define to 1 if your 'struct tm' has 'tm_zone'. Deprecated, use
+   'HAVE_STRUCT_TM_TM_ZONE' instead. */
 #undef HAVE_TM_ZONE
 
-/* Define to 1 if you don't have `tm_zone' but do have the external array
-   `tzname'. */
+/* Define to 1 if you don't have 'tm_zone' but do have the external array
+   'tzname'. */
 #undef HAVE_TZNAME
 
 /* Define if pointers to unaligned uint64_t integers would cause buserror */
@@ -745,13 +492,16 @@
 /* Define to 1 if you have the <unistd.h> header file. */
 #undef HAVE_UNISTD_H
 
+/* Define to 1 if you have the <wchar.h> header file. */
+#undef HAVE_WCHAR_H
+
 /* This value is set to 1 to indicate that the system argz facility works */
 #undef HAVE_WORKING_ARGZ
 
 /* Define to 1 if you have the <xlocale.h> header file. */
 #undef HAVE_XLOCALE_H
 
-/* Define to 1 if the system has the type `_Bool'. */
+/* Define to 1 if the system has the type '_Bool'. */
 #undef HAVE__BOOL
 
 /* Define as const if the declaration of iconv() needs const. */
@@ -797,12 +547,6 @@
 /* Define MAINTAINER_MODE */
 #undef MAINTAINER_MODE
 
-/* defined 'MWI_USE_EVENT' */
-#undef MWI_USE_EVENT
-
-/* defined 'MWI_USE_POLLING' */
-#undef MWI_USE_POLLING
-
 /* Define if dlsym() requires a leading underscore in symbol names. */
 #undef NEED_USCORE
 
@@ -842,7 +586,7 @@
 /* Define PBX_ETC */
 #undef PBX_ETC
 
-/* Define PBX_FRAME as 'struct ast_frame' */
+/* Define PBX_FRAME_TYPE as 'struct ast_frame' */
 #undef PBX_FRAME_TYPE
 
 /* Define PBX_MODDIR */
@@ -851,13 +595,13 @@
 /* Define PBX_PREFIX */
 #undef PBX_PREFIX
 
-/* Defined PBX_RTP_TYPE as 'struct ast_rtp' */
+/* Define PBX_RTP_TYPE as 'struct ast_rtp_instance' */
 #undef PBX_RTP_TYPE
 
 /* PBX Type */
 #undef PBX_TYPE
 
-/* Defined PBX_VARIABLE as 'struct ast_variable' */
+/* Define PBX_VARIABLE_TYPE as 'struct ast_variable' */
 #undef PBX_VARIABLE_TYPE
 
 /* Define PBX_VARLIB */
@@ -870,110 +614,17 @@
 /* Define the REPOS TYPE */
 #undef REPOS_TYPE
 
-/* Defined SCCP Atomic */
-#undef SCCP_ATOMIC
-
-/* if the compiler supports __sync_val_compare_and_swap */
-#undef SCCP_ATOMIC_BUILTINS
-
-/* Found Atomic Ops Library */
-#undef SCCP_ATOMIC_OPS
-
 /* Big Endian */
 #undef SCCP_BIG_ENDIAN
 
 /* Define the SCCP Branch */
 #undef SCCP_BRANCH
 
-/* if the compiler supports __sync_val_compare_and_swap */
-#undef SCCP_BUILTIN_CAS
-
-/* if the compiler supports __sync_val_compare_and_swap on 32-bit ints */
-#undef SCCP_BUILTIN_CAS32
-
-/* if the compiler supports __sync_val_compare_and_swap on 64-bit ints */
-#undef SCCP_BUILTIN_CAS64
-
-/* if the compiler supports __sync_val_compare_and_swap on pointers */
-#undef SCCP_BUILTIN_CAS_PTR
-
-/* if the compiler supports __sync_fetch_and_add */
-#undef SCCP_BUILTIN_INCR
-
 /* defined SCCP_HASH_PRIME */
 #undef SCCP_HASH_PRIME
 
 /* Little Endian */
 #undef SCCP_LITTLE_ENDIAN
-
-/* 'AST_MAX_ACCOUNT_CODE' replacement = 50 */
-#undef SCCP_MAX_ACCOUNT_CODE
-
-/* 'defined SCCP_MAX_AUX = 16' */
-#undef SCCP_MAX_AUX
-
-/* 'defined SCCP_MAX_BUTTON_OPTIONS = 256' */
-#undef SCCP_MAX_BUTTON_OPTIONS
-
-/* 'defined SCCP_MAX_CONTEXT = SCCP_MAX_EXTENSION' */
-#undef SCCP_MAX_CONTEXT
-
-/* 'defined SCCP_MAX_DATE_FORMAT = 8' */
-#undef SCCP_MAX_DATE_FORMAT
-
-/* 'defined SCCP_MAX_DEVICE_CONFIG_TYPE = 16' */
-#undef SCCP_MAX_DEVICE_CONFIG_TYPE
-
-/* 'defined SCCP_MAX_DEVICE_DESCRIPTION = 40' */
-#undef SCCP_MAX_DEVICE_DESCRIPTION
-
-/* 'defined SCCP_MAX_DEVSTATE_SPECIFIER = 256' */
-#undef SCCP_MAX_DEVSTATE_SPECIFIER
-
-/* 'defined SCCP_MAX_EXTENSION = 80' */
-#undef SCCP_MAX_EXTENSION
-
-/* 'defined SCCP_MAX_HOSTNAME_LEN = SCCP_MAX_EXTENSION' */
-#undef SCCP_MAX_HOSTNAME_LEN
-
-/* 'defined SCCP_MAX_LABEL = SCCP_MAX_EXTENSION' */
-#undef SCCP_MAX_LABEL
-
-/* 'MAX_MUSICCLASS' = SCCP_MAX_EXTENSION */
-#undef SCCP_MAX_LANGUAGE
-
-/* 'defined SCCP_MAX_LINE_ID = 8' */
-#undef SCCP_MAX_LINE_ID
-
-/* 'defined SCCP_MAX_LINE_PIN = 8' */
-#undef SCCP_MAX_LINE_PIN
-
-/* 'defined SCCP_MAX_MAILBOX_UNIQUEID' */
-#undef SCCP_MAX_MAILBOX_UNIQUEID
-
-/* 'defined SCCP_MAX_MESSAGESTACK = 10' */
-#undef SCCP_MAX_MESSAGESTACK
-
-/* 'MAX_MUSICCLASS' = SCCP_MAX_EXTENSION */
-#undef SCCP_MAX_MUSICCLASS
-
-/* 'defined SCCP_MAX_REALTIME_TABLE_NAME = 45' */
-#undef SCCP_MAX_REALTIME_TABLE_NAME
-
-/* 'defined SCCP_MAX_SECONDARY_DIALTONE_DIGITS = 10' */
-#undef SCCP_MAX_SECONDARY_DIALTONE_DIGITS
-
-/* 'defined SCCP_MAX_SOFTKEYSET_NAME = 48' */
-#undef SCCP_MAX_SOFTKEYSET_NAME
-
-/* 'defined SCCP_MAX_SOFTKEY_MASK = 16' */
-#undef SCCP_MAX_SOFTKEY_MASK
-
-/* 'defined SCCP_MAX_SOFTKEY_MODES = 16' */
-#undef SCCP_MAX_SOFTKEY_MODES
-
-/* if this header is necessary for builtin atomics */
-#undef SCCP_NEEDS_INTEL_INTRIN
 
 /* Define the SCCP Revision */
 #undef SCCP_REVISION
@@ -984,10 +635,12 @@
 /* using SOLARIS */
 #undef SOLARIS
 
-/* Define to 1 if you have the ANSI C header files. */
+/* Define to 1 if all of the C89 standard headers exist (not just the ones
+   required in a freestanding environment). This macro is provided for
+   backward compatibility; new code need not use it. */
 #undef STDC_HEADERS
 
-/* Define to 1 if your <sys/time.h> declares `struct tm'. */
+/* Define to 1 if your <sys/time.h> declares 'struct tm'. */
 #undef TM_IN_SYS_TIME
 
 /* Define UI64FMT as "%llu" */
@@ -996,25 +649,95 @@
 /* Define ULONG as long long unsigned int */
 #undef ULONG
 
-/* Enable extensions on AIX 3, Interix.  */
+/* Enable extensions on AIX, Interix, z/OS.  */
 #ifndef _ALL_SOURCE
 # undef _ALL_SOURCE
+#endif
+/* Enable general extensions on macOS.  */
+#ifndef _DARWIN_C_SOURCE
+# undef _DARWIN_C_SOURCE
+#endif
+/* Enable general extensions on Solaris.  */
+#ifndef __EXTENSIONS__
+# undef __EXTENSIONS__
 #endif
 /* Enable GNU extensions on systems that have them.  */
 #ifndef _GNU_SOURCE
 # undef _GNU_SOURCE
 #endif
-/* Enable threading extensions on Solaris.  */
+/* Enable X/Open compliant socket functions that do not require linking
+   with -lxnet on HP-UX 11.11.  */
+#ifndef _HPUX_ALT_XOPEN_SOCKET_API
+# undef _HPUX_ALT_XOPEN_SOCKET_API
+#endif
+/* Identify the host operating system as Minix.
+   This macro does not affect the system headers' behavior.
+   A future release of Autoconf may stop defining this macro.  */
+#ifndef _MINIX
+# undef _MINIX
+#endif
+/* Enable general extensions on NetBSD.
+   Enable NetBSD compatibility extensions on Minix.  */
+#ifndef _NETBSD_SOURCE
+# undef _NETBSD_SOURCE
+#endif
+/* Enable OpenBSD compatibility extensions on NetBSD.
+   Oddly enough, this does nothing on OpenBSD.  */
+#ifndef _OPENBSD_SOURCE
+# undef _OPENBSD_SOURCE
+#endif
+/* Define to 1 if needed for POSIX-compatible behavior.  */
+#ifndef _POSIX_SOURCE
+# undef _POSIX_SOURCE
+#endif
+/* Define to 2 if needed for POSIX-compatible behavior.  */
+#ifndef _POSIX_1_SOURCE
+# undef _POSIX_1_SOURCE
+#endif
+/* Enable POSIX-compatible threading on Solaris.  */
 #ifndef _POSIX_PTHREAD_SEMANTICS
 # undef _POSIX_PTHREAD_SEMANTICS
+#endif
+/* Enable extensions specified by ISO/IEC TS 18661-5:2014.  */
+#ifndef __STDC_WANT_IEC_60559_ATTRIBS_EXT__
+# undef __STDC_WANT_IEC_60559_ATTRIBS_EXT__
+#endif
+/* Enable extensions specified by ISO/IEC TS 18661-1:2014.  */
+#ifndef __STDC_WANT_IEC_60559_BFP_EXT__
+# undef __STDC_WANT_IEC_60559_BFP_EXT__
+#endif
+/* Enable extensions specified by ISO/IEC TS 18661-2:2015.  */
+#ifndef __STDC_WANT_IEC_60559_DFP_EXT__
+# undef __STDC_WANT_IEC_60559_DFP_EXT__
+#endif
+/* Enable extensions specified by C23 Annex F.  */
+#ifndef __STDC_WANT_IEC_60559_EXT__
+# undef __STDC_WANT_IEC_60559_EXT__
+#endif
+/* Enable extensions specified by ISO/IEC TS 18661-4:2015.  */
+#ifndef __STDC_WANT_IEC_60559_FUNCS_EXT__
+# undef __STDC_WANT_IEC_60559_FUNCS_EXT__
+#endif
+/* Enable extensions specified by C23 Annex H and ISO/IEC TS 18661-3:2015.  */
+#ifndef __STDC_WANT_IEC_60559_TYPES_EXT__
+# undef __STDC_WANT_IEC_60559_TYPES_EXT__
+#endif
+/* Enable extensions specified by ISO/IEC TR 24731-2:2010.  */
+#ifndef __STDC_WANT_LIB_EXT2__
+# undef __STDC_WANT_LIB_EXT2__
+#endif
+/* Enable extensions specified by ISO/IEC 24747:2009.  */
+#ifndef __STDC_WANT_MATH_SPEC_FUNCS__
+# undef __STDC_WANT_MATH_SPEC_FUNCS__
 #endif
 /* Enable extensions on HP NonStop.  */
 #ifndef _TANDEM_SOURCE
 # undef _TANDEM_SOURCE
 #endif
-/* Enable general extensions on Solaris.  */
-#ifndef __EXTENSIONS__
-# undef __EXTENSIONS__
+/* Enable X/Open extensions.  Define to 500 only if necessary
+   to make mbstate_t available.  */
+#ifndef _XOPEN_SOURCE
+# undef _XOPEN_SOURCE
 #endif
 
 
@@ -1033,16 +756,6 @@
 # endif
 #endif
 
-/* Define to 1 if on MINIX. */
-#undef _MINIX
-
-/* Define to 2 if the system does not provide POSIX.1 features except with
-   this defined. */
-#undef _POSIX_1_SOURCE
-
-/* Define to 1 if you need to in order for `stat' and other things to work. */
-#undef _POSIX_SOURCE
-
 /* Heya, it's windows */
 #undef _WIN32_WINNT
 
@@ -1055,32 +768,17 @@
 /* Define so that glibc/gnulib argp.h does not typedef error_t. */
 #undef __error_t_defined
 
-/* 'ast_free' replacement */
-#undef ast_free
-
-/* 'ast_random' replacement */
-#undef ast_random
-
-/* defined 'bt_free' replacement */
-#undef bt_free
-
-/* defined 'bt_string_t' replacement */
-#undef bt_string_t
-
-/* Define to empty if `const' does not conform to ANSI C. */
+/* Define to empty if 'const' does not conform to ANSI C. */
 #undef const
 
 /* Define to a type to use for 'error_t' if it is not otherwise available. */
 #undef error_t
 
-/* Define to `__inline__' or `__inline' if that's what the C compiler
+/* Define to '__inline__' or '__inline' if that's what the C compiler
    calls it, or to nothing if 'inline' is not supported under any name.  */
 #ifndef __cplusplus
 #undef inline
 #endif
-
-/* Found 'ast_app_separate_args' in asterisk/app.h */
-#undef sccp_app_separate_args
 
 
 
