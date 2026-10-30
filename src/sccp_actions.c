@@ -533,7 +533,7 @@ void handle_token_request(constSessionPtr s, devicePtr no_d, constMessagePtr msg
 				sccp_session_crossdevice_cleanup(s, tmpdevice->session);
 				sccp_session_tokenReject(s, 10);
 				sccp_session_stopthread(s, SKINNY_DEVICE_RS_FAILED);
-				tmpdevice->session = NULL;
+				sccp_device_setSession(tmpdevice, NULL);
 				return;
 			}
 		}
@@ -721,7 +721,7 @@ void handle_SPCPTokenReq(constSessionPtr s, devicePtr no_d, constMessagePtr msg_
 				tmpdevice->registrationTime = time(0);
 				sccp_session_tokenRejectSPCP(s, 10);
 				sccp_session_stopthread(s, SKINNY_DEVICE_RS_FAILED);
-				tmpdevice->session = NULL;
+				sccp_device_setSession(tmpdevice, NULL);
 				return;
 			}
 		}
@@ -766,7 +766,8 @@ void handle_SPCPTokenReq(constSessionPtr s, devicePtr no_d, constMessagePtr msg_
 		pbx_log(LOG_NOTICE, "%s: Crossover device registration!\n", device->id);
 		sccp_device_setRegistrationState(device, SKINNY_DEVICE_RS_FAILED);
 		sccp_session_tokenRejectSPCP(s, token_backoff_time);
-		device->session = sccp_session_reject(device->session, "Crossover session not allowed");
+		sccp_session_reject(device->session, "Crossover session not allowed");
+		sccp_device_setSession(device, NULL);
 		goto EXIT;
 	}
 
@@ -840,7 +841,7 @@ void handle_register(constSessionPtr s, devicePtr maybe_d, constMessagePtr msg_i
 			sccp_session_crossdevice_cleanup(s, device->session);
 			sccp_session_reject(s, "Crossover session");
 			sccp_device_setRegistrationState(device, SKINNY_DEVICE_RS_FAILED);
-			device->session = NULL;
+			sccp_device_setSession(device, NULL);
 			goto FUNC_EXIT;
 		}
 	}
@@ -1008,7 +1009,7 @@ FUNC_EXIT:
 */
 	sccp_session_stopthread(s, SKINNY_DEVICE_RS_FAILED);
 	if (device) {
-		device->session = NULL;
+		sccp_device_setSession(device, NULL);
 	}
 }
 

@@ -2481,9 +2481,11 @@ void _sccp_dev_clean(devicePtr device, boolean_t remove_from_global, boolean_t r
 				sccp_device_sendReset(d, SKINNY_RESETTYPE_RESTART);
 				//sccp_safe_sleep(100);
 			}
-			sccp_session_releaseDevice(s);
-			d->session = NULL;
-			sccp_session_stopthread(s, SKINNY_DEVICE_RS_NONE);
+			sccp_session_t * tmp = sccp_session_retain(s);						/* keep it alive until we told it to stop */
+			sccp_session_releaseDevice(tmp);
+			sccp_device_setSession(d, NULL);
+			sccp_session_stopthread(tmp, SKINNY_DEVICE_RS_NONE);
+			sccp_session_release(&tmp);
 		}
 		sccp_device_setRegistrationState(d, SKINNY_DEVICE_RS_NONE);
 /*
