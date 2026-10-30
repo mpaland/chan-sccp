@@ -1,3 +1,35 @@
+Version: v4.3.5_DEV
+==========================
+
+ - Asterisk support:
+   - Requires Asterisk >= 20 (Asterisk 20, 21 and 22). Support for Asterisk 11 to 19 has been removed.
+   - Single pbx glue implementation in src/pbx_impl/ast (astNNN directories and symlinks are gone)
+   - configure detects the Asterisk major version from AMI_VERSION (asterisk/manager.h);
+     --with-asterisk-version=MAJOR[.MINOR] overrides detection
+   - Loads on Asterisk 21/22 (macroexten/macrocontext accessors removed together with app_macro, #609)
+
+ - Resolved issues:
+   - No audio from the PBX to the phone on Asterisk >= 20.10 / 21 / 22
+     ("Don't know how to send format ulaw packets with RTP", #615, #617):
+     tx/rx payload mappings are registered for every negotiable codec
+   - Build error with DEBUG_FD_LEAKS (transport accept/close callbacks, #625)
+   - Use-after-free on 'sccp reload line' (#602)
+   - Config reload leaked the previous configuration on every reload
+   - Deadlock when bindaddr/port changed on reload
+   - Many memory, reference count and locking defects, see doc/ANALYSIS.md
+
+ - Internals:
+   - Reference counting on compiler atomics, no mutex fallback
+   - Sessions are reference counted and stopped cooperatively (no pthread_cancel)
+   - Threadpool workers are joinable, queued jobs are released on shutdown
+   - List locks are leaf locks (collect under the lock, act after unlocking)
+   - NAT hole punch is a one-shot state machine per rtp port lifetime
+
+ - Changed defaults (introduced with the 4.3.4 holepunch work, now documented):
+   - dateformat: M/D/YY (was M/D/Y)
+   - firstdigittimeout: 10 (was 16)
+   - digittimeout: 5 (was 8)
+
 Version: v4.3.4_DEV
 ==========================
 

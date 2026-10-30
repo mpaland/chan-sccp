@@ -47,6 +47,7 @@ jobs:
         # queries: ./path/to/local/query, your-org/your-repo/queries@main
 
     - name: Install dependencies
+      # chan-sccp requires Asterisk >= 20 (the asterisk-dev package of ubuntu-latest)
       run: |
         #sudo apt-get install -qq libblocksruntime0 libblocksruntime-dev libpj2 libpjmedia2 libpjnath2 libpjproject-dev libpjsip2 libpjsua2 asterisk asterisk-dev asterisk-config asterisk-modules binutils.dev libc6-dev gettext  autoconf automake m4 autotools-dev libltdl-dev
         sudo apt-get update

@@ -56,8 +56,7 @@ Make sure you have the following installed on your system:
   - gettext
   - libssl-dev / openssl-devel
 - pbx:
-  - asterisk >= 11 (absolute minimum)
-  - asterisk >= 16 or 18 recommended
+  - asterisk >= 20 (Asterisk 20, 21 and 22 are supported; older versions are not supported anymore)
   - including source headers and debug symbols (asterisk-dev and asterisk-dbg / asterisk-devel and asterisk-debug-info)
   - chan_skinny module is prevented from loading in /etc/asterisk/modules.conf
 - standard posix compatible applications like sed, awk, tr
@@ -114,6 +113,9 @@ We provide prebuild binaries for:
   See [PPA Package Details](https://launchpad.net/~chan-sccp-b/+archive/ubuntu/ppa/+packages).
 - [OpenSuSE Build Service](https://build.opensuse.org/project/show/home:chan-sccp-b):
   [OpenSuSE Repository Lookup](https://software.opensuse.org/search?utf8=%E2%9C%93&baseproject=ALL&q=sccp)
+
+  Note: the repositories listed below were built from earlier chan-sccp releases against Asterisk 11 to 18. The current
+  source requires Asterisk >= 20 and has to be built from source until new packages are published.
   - Asterisk-11
     - [Debian-8.0](https://download.opensuse.org/repositories/home:/chan-sccp-b:/asterisk-11/Debian_8.0/)
   - Asterisk-13
