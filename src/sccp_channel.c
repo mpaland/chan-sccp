@@ -552,14 +552,11 @@ static boolean_t sccp_channel_recalculateVideoCodecFormat(channelPtr channel)
 			}
 			return FALSE;
 		}
-		//if (channel->rtp.video.instance) {
 		skinny_codec_t codecs[SKINNY_MAX_CAPABILITIES] = { joint, SKINNY_CODEC_NONE};
 		iPbx.set_nativeVideoFormats(channel, codecs);
-		//}
 		channel->rtp.video.reception.format = joint;
 		channel->rtp.video.transmission.format = joint;
-		iPbx.rtp_setWriteFormat(channel, joint);
-		iPbx.rtp_setReadFormat(channel, joint);
+		/* note: rtp_setWriteFormat/rtp_setReadFormat are audio only (they used to push the video codec into the audio path) */
 	}
 	sccp_log((DEBUGCAT_CODEC + DEBUGCAT_CHANNEL)) (VERBOSE_PREFIX_3
 		"%s - %s: (recalculateVideoCodecformat) \n\t"

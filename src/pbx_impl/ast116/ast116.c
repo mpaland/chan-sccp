@@ -228,6 +228,63 @@ static void pbx_format_cap_append_skinny(struct ast_format_cap *caps, skinny_cod
 	}
 }
 
+/*!
+ * \brief Register one skinny codec on an rtp instance for both directions (rx and tx).
+ *
+ * Since Asterisk commit 055031d (18.x / 20.10+) ast_rtp_write() only consults codecs->payload_mapping_tx; the
+ * static payload table is no longer used as a fallback. chan-sccp has no SDP exchange that would fill that
+ * table, so every codec the phone may use has to be registered explicitly, otherwise res_rtp_asterisk logs
+ * "Don't know how to send format xxx packets with RTP" and drops all outbound audio (upstream #615/#617).
+ *
+ * For codecs with a well known (static) rtp payload type the skinny_codecs[] table value is used, so that the
+ * payload type matches what the phone expects. For dynamic codecs asterisk assigns the payload type (rx) and
+ * the tx mapping is forced to the same value, because SCCP signals a single payload type for both directions.
+ *
+ * \returns the payload type registered, or -1 when the codec has no asterisk format
+ */
+static int sccp_astwrap_rtp_registerPayload(PBX_RTP_TYPE * instance, skinny_codec_t codec)
+{
+	struct ast_format * fmt = sccp_astwrap_skinny2ast_format(codec);
+	if (!instance || fmt == ast_format_none) {
+		return -1;
+	}
+	struct ast_rtp_codecs * codecs = ast_rtp_instance_get_codecs(instance);
+
+	/* already registered for tx ? make sure rx agrees and we are done */
+	int pt = ast_rtp_codecs_payload_code_tx(codecs, 1, fmt, 0);
+	if (pt >= 0) {
+		if (ast_rtp_codecs_payload_code(codecs, 1, fmt, 0) != pt) {
+			ast_rtp_codecs_payload_set_rx(codecs, pt, fmt);
+		}
+		return pt;
+	}
+
+	int skinny_pt = codec2rtp_payload_type(codec);                                        /* -1 / -2 = unknown or dynamic */
+	if (skinny_pt >= 0 && skinny_pt < AST_RTP_MAX_PT && ast_rtp_codecs_payload_set_rx(codecs, skinny_pt, fmt) == 0) {
+		pt = skinny_pt;
+	} else {
+		pt = ast_rtp_codecs_payload_code(codecs, 1, fmt, 0);                            /* let asterisk pick / assign the rx payload */
+	}
+	if (pt >= 0 && ast_rtp_codecs_payload_replace_format(codecs, pt, fmt) != 0) {        /* tx mapping */
+		pt = -1;
+	}
+	sccp_log(DEBUGCAT_RTP)(VERBOSE_PREFIX_3 "SCCP: (rtp_registerPayload) registered %s (%s) as rtp payload type %d on instance %p\n", codec2name(codec), ast_format_get_name(fmt), pt, instance);
+	return pt;
+}
+
+/*!
+ * \brief Register a (SKINNY_CODEC_NONE terminated) list of skinny codecs on an rtp instance
+ */
+static void sccp_astwrap_rtp_registerPayloads(PBX_RTP_TYPE * instance, const skinny_codec_t codecs[], size_t length)
+{
+	if (!instance || !codecs) {
+		return;
+	}
+	for (size_t n = 0; n < length && codecs[n] != SKINNY_CODEC_NONE; n++) {
+		sccp_astwrap_rtp_registerPayload(instance, codecs[n]);
+	}
+}
+
 #if defined(__cplusplus) || defined(c_plusplus)
 /*!
  * \brief NULL Tech Structure
@@ -534,15 +591,15 @@ static void __find_joint_capabilities(sccp_channel_t *c, PBX_CHANNEL_TYPE* peer,
 				sccp_log(DEBUGCAT_CODEC) (VERBOSE_PREFIX_4 "%s: (find_joint_capabilities) NOT transcoding, best_native:%s\n", c->designator, ast_format_get_codec_name(best_fmt_native));
 				if (best_fmt_native) {
 					ast_format_cap_remove_by_type(caps, media_type);
-					ast_format_cap_append(caps, best_fmt_native, media_type);
+					ast_format_cap_append(caps, best_fmt_native, 0);
 				}
 				ast_format_cap_append_from_cap(caps, joint, media_type);
 			} else {
+				/* ast_translator_best_choice returns bumped references for both formats */
 				ast_translator_best_choice(remote_caps, caps, &best_fmt_cap, &best_fmt_native);
 				if (best_fmt_native) {
-					ao2_ref(best_fmt_native, +1);
 					ast_format_cap_remove_by_type(caps, media_type);
-					ast_format_cap_append(caps, best_fmt_cap, media_type);
+					ast_format_cap_append(caps, best_fmt_cap, 0);
 				} else {
 					best_fmt_native = ast_format_cap_get_best_by_type(caps, media_type);
 				}
@@ -570,14 +627,17 @@ static void __find_joint_capabilities(sccp_channel_t *c, PBX_CHANNEL_TYPE* peer,
 						if (c->rtp.audio.instance) {
 							ast_rtp_instance_set_write_format(c->rtp.audio.instance, best_fmt_native);
 							ast_rtp_instance_set_read_format(c->rtp.audio.instance, best_fmt_native);
+							sccp_astwrap_rtp_registerPayload(c->rtp.audio.instance, pbx_codec2skinny_codec(ast_format_compatibility_format2bitfield(best_fmt_native)));
 						}
 					} else if (AST_MEDIA_TYPE_VIDEO == media_type && c->rtp.video.instance) {
 						ast_rtp_instance_set_write_format(c->rtp.video.instance, best_fmt_native);
 						ast_rtp_instance_set_read_format(c->rtp.video.instance, best_fmt_native);
+						sccp_astwrap_rtp_registerPayload(c->rtp.video.instance, pbx_codec2skinny_codec(ast_format_compatibility_format2bitfield(best_fmt_native)));
 					}
 				}
 				ao2_ref(best_fmt_native, -1);
 			}
+			ao2_cleanup(best_fmt_cap);
 		}
 		return;
 	}
@@ -1627,13 +1687,16 @@ static boolean_t sccp_astwrap_getPickupExtension(constChannelPtr channel, char e
 	return res;
 }
 
+/*!
+ * \brief Retrieve the rtp payload type to be signalled to the phone for a codec (same value for rx and tx)
+ */
 static uint8_t sccp_astwrap_get_payloadType(const struct sccp_rtp *rtp, skinny_codec_t codec)
 {
-	struct ast_format *astCodec = sccp_astwrap_skinny2ast_format(codec);
-	if (astCodec != ast_format_none) {
-		return ast_rtp_codecs_payload_code(ast_rtp_instance_get_codecs(rtp->instance), 1, astCodec, 0);
+	if (!rtp || !rtp->instance) {
+		return 0;
 	}
-	return 0;
+	int pt = sccp_astwrap_rtp_registerPayload(rtp->instance, codec);
+	return (pt >= 0) ? (uint8_t)pt : 0;
 }
 
 static int sccp_astwrap_get_sampleRate(skinny_codec_t codec)
@@ -1763,16 +1826,25 @@ static PBX_CHANNEL_TYPE *sccp_astwrap_request(const char *type, struct ast_forma
 	}
 	sccp_parse_auto_answer((PBX_CHANNEL_TYPE *)requestor, &autoanswer_type);
 
-	/** get requested format */
-	if ( (audio_codec = pbx_codec2skinny_codec(ast_format_compatibility_format2bitfield(ast_format_cap_get_best_by_type(cap, AST_MEDIA_TYPE_AUDIO)))) == SKINNY_CODEC_NONE) {
-		pbx_log(LOG_NOTICE, "Could not match audio codec, Falling back to ULAW\n");
+	/** get requested format (ast_format_cap_get_best_by_type returns a reference) */
+	{
+		struct ast_format * best_audio = ast_format_cap_get_best_by_type(cap, AST_MEDIA_TYPE_AUDIO);
+		audio_codec = best_audio ? pbx_codec2skinny_codec(ast_format_compatibility_format2bitfield(best_audio)) : SKINNY_CODEC_NONE;
+		ao2_cleanup(best_audio);
+	}
+	if (audio_codec == SKINNY_CODEC_NONE) {
+		pbx_log(LOG_NOTICE, "Could not match audio codec, Falling back to G722\n");
 		audio_codec = SKINNY_CODEC_G722_64K;
 	}
 	sccp_log(DEBUGCAT_CODEC) (VERBOSE_PREFIX_4 "SCCP: requested Audio Codec in Skinny Format: %s\n", codec2str(audio_codec));
 #ifdef CS_SCCP_VIDEO
-	if ( (video_codec = pbx_codec2skinny_codec(ast_format_compatibility_format2bitfield(ast_format_cap_get_best_by_type(cap, AST_MEDIA_TYPE_VIDEO)))) == SKINNY_CODEC_NONE) {
+	{
+		struct ast_format * best_video = ast_format_cap_get_best_by_type(cap, AST_MEDIA_TYPE_VIDEO);
+		video_codec = best_video ? pbx_codec2skinny_codec(ast_format_compatibility_format2bitfield(best_video)) : SKINNY_CODEC_NONE;
+		ao2_cleanup(best_video);
+	}
+	if (video_codec == SKINNY_CODEC_NONE) {
 		pbx_log(LOG_NOTICE, "Could not match video codec. No Video\n");
-		video_codec = SKINNY_CODEC_NONE;
 	}
 	sccp_log(DEBUGCAT_CODEC) (VERBOSE_PREFIX_4 "SCCP: requested Video Codec in Skinny Format: %s\n", codec2str(video_codec));
 #endif
@@ -2525,11 +2597,28 @@ static boolean_t sccp_astwrap_createRtpInstance(constDevicePtr d, constChannelPt
 		ast_rtp_codecs_payloads_set_m_type(ast_rtp_instance_get_codecs(instance), instance, 101);
 		if (ast_rtp_codecs_payloads_set_rtpmap_type(ast_rtp_instance_get_codecs(instance), instance, 101, rtp_map_filter, "telephone-event", (enum ast_rtp_options)0)) {
 			ast_rtp_codecs_payloads_unset(ast_rtp_instance_get_codecs(instance), instance, 101);
- 		}
-		ast_rtp_codecs_payload_replace_format(ast_rtp_instance_get_codecs(instance), 25, ast_format_slin16);				// replace slin16 RTPPayloadType=25 (wideband-256)
+		}
 	}
 
-	ast_rtp_codecs_set_framing(ast_rtp_instance_get_codecs(instance), ast_format_cap_get_framing(ast_channel_nativeformats(c->owner)));
+	/* Register every codec this channel/device can use, in both directions (see sccp_astwrap_rtp_registerPayload) */
+	if (rtp->type == SCCP_RTP_AUDIO) {
+		sccp_astwrap_rtp_registerPayloads(instance, (c->capabilities.audio[0] != SKINNY_CODEC_NONE) ? c->capabilities.audio : d->capabilities.audio, SKINNY_MAX_CAPABILITIES);
+		sccp_astwrap_rtp_registerPayload(instance, c->rtp.audio.reception.format);
+		sccp_astwrap_rtp_registerPayload(instance, c->rtp.audio.transmission.format);
+#if CS_SCCP_VIDEO
+	} else {
+		sccp_astwrap_rtp_registerPayloads(instance, (c->capabilities.video[0] != SKINNY_CODEC_NONE) ? c->capabilities.video : d->capabilities.video, SKINNY_MAX_CAPABILITIES);
+		sccp_astwrap_rtp_registerPayload(instance, c->rtp.video.reception.format);
+		sccp_astwrap_rtp_registerPayload(instance, c->rtp.video.transmission.format);
+#endif
+	}
+
+	if (c->owner) {
+		unsigned int framing = ast_format_cap_get_framing(ast_channel_nativeformats(c->owner));
+		if (framing) {
+			ast_rtp_codecs_set_framing(ast_rtp_instance_get_codecs(instance), framing);
+		}
+	}
 	ast_rtp_instance_activate(instance);
 
 	if (c->owner) {
@@ -2635,6 +2724,9 @@ static int sccp_astwrap_setNativeAudioFormats(constChannelPtr channel, skinny_co
 	ast_format_cap_append_from_cap(caps, ast_channel_nativeformats(channel->owner), AST_MEDIA_TYPE_UNKNOWN);
 	ast_format_cap_remove_by_type(caps, AST_MEDIA_TYPE_AUDIO);
 	pbx_format_cap_append_skinny(caps, codecs);
+	if (channel->rtp.audio.instance) {
+		sccp_astwrap_rtp_registerPayloads(channel->rtp.audio.instance, codecs, SKINNY_MAX_CAPABILITIES);
+	}
 
 	ast_channel_lock(channel->owner);
 	ast_channel_nativeformats_set(channel->owner, caps);
@@ -2659,6 +2751,9 @@ static int sccp_astwrap_setNativeVideoFormats(constChannelPtr channel, skinny_co
 	ast_format_cap_append_from_cap(caps, ast_channel_nativeformats(channel->owner), AST_MEDIA_TYPE_UNKNOWN);
 	ast_format_cap_remove_by_type(caps, AST_MEDIA_TYPE_VIDEO);
 	pbx_format_cap_append_skinny(caps, codecs);
+	if (channel->rtp.video.instance) {
+		sccp_astwrap_rtp_registerPayloads(channel->rtp.video.instance, codecs, SKINNY_MAX_CAPABILITIES);
+	}
 
 	ast_channel_lock(channel->owner);
 	ast_channel_nativeformats_set(channel->owner, caps);
@@ -2670,34 +2765,44 @@ static int sccp_astwrap_setNativeVideoFormats(constChannelPtr channel, skinny_co
 	return 1;
 }
 
+/*!
+ * \brief Set the audio write format (pbx -> phone) of the owner channel and its audio rtp instance
+ * \note audio only; video formats are handled via set_nativeVideoFormats / the rtp payload registration
+ */
 static boolean_t sccp_astwrap_setWriteFormat(constChannelPtr channel, skinny_codec_t codec)
 {
-	if (!channel) {
+	if (!channel || !channel->owner) {
 		return FALSE;
 	}
 	struct ast_format *ast_format = sccp_astwrap_skinny2ast_format(codec);
-	if (ast_format == ast_format_none)
+	if (ast_format == ast_format_none || ast_format_get_type(ast_format) != AST_MEDIA_TYPE_AUDIO) {
 		return FALSE;
+	}
 
 	ast_set_write_format(channel->owner, ast_format);
 	if (NULL != channel->rtp.audio.instance) {
+		sccp_astwrap_rtp_registerPayload(channel->rtp.audio.instance, codec);
 		ast_rtp_instance_set_write_format(channel->rtp.audio.instance, ast_format);
 	}
 	return TRUE;
 }
 
+/*!
+ * \brief Set the audio read format (phone -> pbx) of the owner channel and its audio rtp instance
+ */
 static boolean_t sccp_astwrap_setReadFormat(constChannelPtr channel, skinny_codec_t codec)
 {
-	if (!channel) {
+	if (!channel || !channel->owner) {
+		return FALSE;
+	}
+	struct ast_format *ast_format = sccp_astwrap_skinny2ast_format(codec);
+	if (ast_format == ast_format_none || ast_format_get_type(ast_format) != AST_MEDIA_TYPE_AUDIO) {
 		return FALSE;
 	}
 
-	struct ast_format *ast_format = sccp_astwrap_skinny2ast_format(codec);
-	if (ast_format == ast_format_none)
-		return FALSE;
-
-	ast_set_write_format(channel->owner, ast_format);
+	ast_set_read_format(channel->owner, ast_format);
 	if (NULL != channel->rtp.audio.instance) {
+		sccp_astwrap_rtp_registerPayload(channel->rtp.audio.instance, codec);
 		ast_rtp_instance_set_read_format(channel->rtp.audio.instance, ast_format);
 	}
 	return TRUE;
