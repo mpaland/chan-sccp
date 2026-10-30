@@ -123,14 +123,6 @@ const char *pbx_getformatname_multiple(char *buf, size_t size, struct ast_format
 
 int pbx_manager_register(const char *action, int authority, int (*func) (struct mansession * s, const struct message * m), const char *synopsis, const char *description);
 
-#undef CS_AST_CHANNEL_PVT
-#undef CS_AST_CHANNEL_PVT_TYPE
-#undef CS_AST_CHANNEL_PVT_CMP_TYPE
-
-#define CS_AST_CHANNEL_PVT(_a) ((sccp_channel_t*)ast_channel_tech_pvt(_a))
-#define CS_AST_CHANNEL_PVT_TYPE(_a) ast_channel_tech(_a)->type
-#define CS_AST_CHANNEL_PVT_CMP_TYPE(_a,_b) !strncasecmp(CS_AST_CHANNEL_PVT_TYPE(_a), _b, strlen(_b))
-
 #define NEWCONST const												// old functions used without const
 #define OLDCONST												// new function used with const
 
