@@ -2257,6 +2257,7 @@ void sccp_channel_addCleanupJob(channelPtr c, void *(*function_p) (void *), void
 	/* add function and argument */
 	newJob->function = function_p;
 	newJob->arg = arg_p;
+	newJob->arg_cleanup = (void (*)(void *))function_p;						/* a cleanup job may be executed synchronously if the pool is gone */
 
 	/* add job to cleanup jobqueue */
 	SCCP_LIST_LOCK(&(c->privateData->cleanup_jobs));

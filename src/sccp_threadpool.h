@@ -54,6 +54,7 @@ typedef struct sccp_threadpool_job sccp_threadpool_job_t;
 struct sccp_threadpool_job {
 	void *(*function) (void *arg);										/*!< function pointer         */
 	void *arg;												/*!< function's argument      */
+	void (*arg_cleanup) (void *arg);									/*!< optional: releases arg when the job is dropped without running (pool shutdown) */
 	SCCP_LIST_ENTRY (sccp_threadpool_job_t) list;
 };
 

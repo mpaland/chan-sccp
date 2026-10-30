@@ -25,6 +25,7 @@ SCCP_FILE_VERSION(__FILE__, "");
 void sccp_threadpool_grow_locked(sccp_threadpool_t * tp_p, int amount);
 void sccp_threadpool_shrink_locked(sccp_threadpool_t * tp_p, int amount);
 void *sccp_threadpool_thread_do(void *p);
+static void sccp_threadpool_reap_finished(sccp_threadpool_t * tp_p);
 
 typedef struct sccp_threadpool_thread sccp_threadpool_thread_t;
 
@@ -38,7 +39,8 @@ struct sccp_threadpool_thread {
 /* The threadpool */
 struct sccp_threadpool {
 	SCCP_LIST_HEAD (, sccp_threadpool_job_t) jobs;
-	SCCP_LIST_HEAD (, sccp_threadpool_thread_t) threads;
+	SCCP_LIST_HEAD (, sccp_threadpool_thread_t) threads;							/*!< running workers */
+	SCCP_LIST_HEAD (, sccp_threadpool_thread_t) finished;							/*!< exited workers, waiting to be joined and freed */
 	pbx_cond_t work;
 	pbx_cond_t exit;
 	time_t last_size_check;											/*!< Time since last size check */
@@ -81,6 +83,7 @@ sccp_threadpool_t *sccp_threadpool_init(int threadsN)
 
 	/* initialize the thread pool */
 	SCCP_LIST_HEAD_INIT(&tp_p->threads);
+	SCCP_LIST_HEAD_INIT(&tp_p->finished);
 
 	/* Initialise the job queue */
 	SCCP_LIST_HEAD_INIT(&tp_p->jobs);
@@ -119,11 +122,17 @@ void sccp_threadpool_grow_locked(sccp_threadpool_t * tp_p, int amount)
 			tp_thread->tp_p = tp_p;
 
 			pthread_attr_init(&attr);
-			pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+			pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);					/* workers are joined when they exit (see reap_finished) */
 			SCCP_LIST_INSERT_HEAD(&(tp_p->threads), tp_thread, list);
-			pbx_pthread_create(&(tp_thread->thread), &attr, sccp_threadpool_thread_do, (void *) tp_thread);
-			sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_3 "Created thread %d(%p) in pool \n", t, (void *) tp_thread->thread);
-			pbx_cond_broadcast(&(tp_p->work));
+			if (pbx_pthread_create(&(tp_thread->thread), &attr, sccp_threadpool_thread_do, (void *) tp_thread)) {
+				pbx_log(LOG_ERROR, "SCCP: (threadpool_grow) could not create worker thread\n");
+				SCCP_LIST_REMOVE(&(tp_p->threads), tp_thread, list);
+				sccp_free(tp_thread);
+			} else {
+				sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_3 "Created thread %d(%p) in pool \n", t, (void *) tp_thread->thread);
+				pbx_cond_broadcast(&(tp_p->work));
+			}
+			pthread_attr_destroy(&attr);
 		}
 	}
 }
@@ -175,23 +184,40 @@ static void sccp_threadpool_check_size(sccp_threadpool_t * tp_p)
 			sccp_log((DEBUGCAT_THPOOL)) (VERBOSE_PREFIX_3 "(sccp_threadpool_check_resize) Number of threads: %d, job_high_water_mark: %d\n", SCCP_LIST_GETSIZE(&tp_p->threads), tp_p->job_high_water_mark);
 		}
 		SCCP_LIST_UNLOCK(&(tp_p->threads));
+		sccp_threadpool_reap_finished(tp_p);									/* join workers that exited since the last check */
 	}
 }
 
 static void sccp_threadpool_thread_end(void *p)
 {
 	sccp_threadpool_thread_t *tp_thread = (sccp_threadpool_thread_t *) p;
-	sccp_threadpool_thread_t *res = NULL;
 	sccp_threadpool_t *tp_p = tp_thread->tp_p;
 
+	/* move ourselves from the running to the finished list; the record (and our thread handle) is freed by the
+	 * thread that joins us (sccp_threadpool_reap_finished), so the pool is never freed while a worker is still alive */
 	SCCP_LIST_LOCK(&(tp_p->threads));
-	res = SCCP_LIST_REMOVE(&(tp_p->threads), tp_thread, list);
+	SCCP_LIST_REMOVE(&(tp_p->threads), tp_thread, list);
 	SCCP_LIST_UNLOCK(&(tp_p->threads));
-
+	SCCP_LIST_LOCK(&(tp_p->finished));
+	SCCP_LIST_INSERT_TAIL(&(tp_p->finished), tp_thread, list);
+	SCCP_LIST_UNLOCK(&(tp_p->finished));
 	pbx_cond_signal(&(tp_p->exit));
-	if (res) {
-		sccp_free(res);
+}
+
+/*!
+ * \brief Join and free the workers that have exited. Called periodically from the size check and from destroy.
+ */
+static void sccp_threadpool_reap_finished(sccp_threadpool_t * tp_p)
+{
+	sccp_threadpool_thread_t *tp_thread = NULL;
+	SCCP_LIST_LOCK(&(tp_p->finished));
+	while ((tp_thread = SCCP_LIST_REMOVE_HEAD(&(tp_p->finished), list))) {
+		SCCP_LIST_UNLOCK(&(tp_p->finished));
+		pthread_join(tp_thread->thread, NULL);
+		sccp_free(tp_thread);
+		SCCP_LIST_LOCK(&(tp_p->finished));
 	}
+	SCCP_LIST_UNLOCK(&(tp_p->finished));
 }
 
 /* What each individual thread is doing */
@@ -201,7 +227,6 @@ void *sccp_threadpool_thread_do(void *p)
 	sccp_threadpool_t *tp_p = tp_thread->tp_p;
 	void *thread = (void *) pthread_self();
 
-	pthread_cleanup_push(sccp_threadpool_thread_end, tp_thread);
 
 	int jobs = 0;
 
@@ -209,13 +234,10 @@ void *sccp_threadpool_thread_do(void *p)
 
 	sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_3 "Starting Threadpool JobQueue:%p\n", thread);
 	while (1) {
-		pthread_testcancel();
 
 		SCCP_LIST_LOCK(&(tp_p->threads));								/* LOCK */
 		threads = SCCP_LIST_GETSIZE(&tp_p->threads);
 		SCCP_LIST_UNLOCK(&(tp_p->threads));
-
-		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
 
 		SCCP_LIST_LOCK(&(tp_p->jobs));									/* LOCK */
 		jobs = SCCP_LIST_GETSIZE(&tp_p->jobs);
@@ -252,10 +274,9 @@ void *sccp_threadpool_thread_do(void *p)
 				sccp_threadpool_check_size(tp_p);						/* Check Resizing */
 			}
 		}
-		pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 	}
 	sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_3 "JobQueue Exiting Thread...\n");
-	pthread_cleanup_pop(1);
+	sccp_threadpool_thread_end(tp_thread);
 	return NULL;
 }
 
@@ -326,24 +347,25 @@ boolean_t sccp_threadpool_destroy(sccp_threadpool_t * tp_p)
 			pbx_cond_timedwait(&tp_p->exit, &(tp_p->threads.lock), &ts);
 		}
 
-		/* Make sure threads have finished (should never have to execute) */
-		if (SCCP_LIST_GETSIZE(&tp_p->threads) != 0) {
-			while ((tp_thread = SCCP_LIST_REMOVE_HEAD(&(tp_p->threads), list))) {
-				pbx_log(LOG_ERROR, "Forcing Destroy of thread %p\n", tp_thread);
-				pthread_cancel(tp_thread->thread);
-				pthread_kill(tp_thread->thread, SIGURG);
-				pthread_join(tp_thread->thread, NULL);
-			}
-		}
 		SCCP_LIST_UNLOCK(&(tp_p->threads));
 	}
+	if (SCCP_LIST_GETSIZE(&tp_p->threads) != 0) {
+		/* a worker is stuck in a job: we cannot cancel it safely, and freeing the pool would be a use-after-free in that worker */
+		pbx_log(LOG_ERROR, "SCCP: (threadpool_destroy) %d worker thread(s) did not finish, leaking the threadpool %p instead of freeing it under a running thread\n", SCCP_LIST_GETSIZE(&tp_p->threads), tp_p);
+		return FALSE;
+	}
+	sccp_threadpool_reap_finished(tp_p);										/* join and free the exited workers */
 
 	/* Dealloc: release jobs that were never executed */
 	{
 		sccp_threadpool_job_t * job = NULL;
 		SCCP_LIST_LOCK(&(tp_p->jobs));
 		while ((job = SCCP_LIST_REMOVE_HEAD(&(tp_p->jobs), list))) {
-			pbx_log(LOG_WARNING, "SCCP: (threadpool_destroy) discarding unexecuted job %p\n", job);
+			if (job->arg_cleanup) {
+				job->arg_cleanup(job->arg);									/* release what the job would have released */
+			} else {
+				pbx_log(LOG_WARNING, "SCCP: (threadpool_destroy) discarding unexecuted job %p\n", job);
+			}
 			sccp_free(job);
 		}
 		SCCP_LIST_UNLOCK(&(tp_p->jobs));
@@ -352,6 +374,7 @@ boolean_t sccp_threadpool_destroy(sccp_threadpool_t * tp_p)
 	pbx_cond_destroy(&(tp_p->exit));									/* Remove Condition */
 	SCCP_LIST_HEAD_DESTROY(&(tp_p->jobs));
 	SCCP_LIST_HEAD_DESTROY(&(tp_p->threads));
+	SCCP_LIST_HEAD_DESTROY(&(tp_p->finished));
 	sccp_free(tp_p);
 	tp_p = NULL;												/* DEALLOC thread pool */
 	sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_3 "Threadpool Ended\n");
@@ -379,6 +402,9 @@ void sccp_threadpool_jobqueue_add(sccp_threadpool_t * tp_p, sccp_threadpool_job_
 	if (tp_p->sccp_threadpool_shuttingdown) {
 		pbx_log(LOG_ERROR, "(sccp_threadpool_jobqueue_add) shutting down. skipping work\n");
 		SCCP_LIST_UNLOCK(&(tp_p->jobs));
+		if (newjob_p->arg_cleanup) {
+			newjob_p->arg_cleanup(newjob_p->arg);
+		}
 		sccp_free(newjob_p);
 		return;
 	}
