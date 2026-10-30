@@ -1124,6 +1124,9 @@ boolean_t sccp_softkeyMap_replaceCallBackByUriAction(sccp_softkeyMap_cb_t * cons
 	for(uint i = 0; i < ARRAY_LEN(softkeyCbMap); i++) {
 		if (event == softkeyMap[i].event) {
 			softkeyMap[i].softkeyEvent_cb = sccp_sk_uriaction;
+			if (softkeyMap[i].uriactionstr) {
+				sccp_free(softkeyMap[i].uriactionstr);
+			}
 			softkeyMap[i].uriactionstr = pbx_strdup(sccp_trimwhitespace(uriactionstr));
 			return TRUE;
 		}

@@ -1038,7 +1038,7 @@ static void sccp_session_start_accept_thread(sccp_servercontext_t * context)
 void sccp_session_stop_accept_thread(sccp_servercontext_t * context)
 {
 	sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_3 "Stopping Accepting Thread\n");
-	pbx_rwlock_wrlock(&GLOB(lock));
+	/* note: must not take GLOB(lock) here: sccp_reload() already holds it write-locked when the bind address changes (self-deadlock) */
 	if(context->accept_tid && (context->accept_tid != AST_PTHREADT_STOP)) {
 		if (pthread_cancel(context->accept_tid) != 0) {
 			pthread_kill(context->accept_tid, SIGURG);
@@ -1051,7 +1051,6 @@ void sccp_session_stop_accept_thread(sccp_servercontext_t * context)
 		context->transport->close_socket(&context->sc);
 		context->sc.fd = -1;
 	}
-	pbx_rwlock_unlock(&GLOB(lock));
 }
 
 /*!

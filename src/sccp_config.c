@@ -423,6 +423,7 @@ static PBX_VARIABLE_TYPE *createVariableSetForMultiEntryParameters(PBX_VARIABLE_
 					if (!(tmp->next = pbx_variable_new(v->name, v->value, ""))) {
 						pbx_log(LOG_ERROR, "SCCP: (sccp_config) Error while creating new var structure\n");
 						pbx_variables_destroy(out);
+						out = NULL;
 						goto EXIT;
 					}
 					tmp = tmp->next;
@@ -461,6 +462,7 @@ static PBX_VARIABLE_TYPE * createVariableSetForMultiEntryParameters(PBX_VARIABLE
 					if (!(tmp->next = pbx_variable_new(v->name, v->value, ""))) {
 						pbx_log(LOG_ERROR, "SCCP: (sccp_config) Error while creating new var structure\n");
 						pbx_variables_destroy(out);
+						out = NULL;
 						goto EXIT;
 					}
 					tmp = tmp->next;
@@ -499,6 +501,7 @@ static PBX_VARIABLE_TYPE * createVariableSetForTokenizedDefault(const char * con
 			if (!(tmp->next = pbx_variable_new(option_name, option_value, ""))) {
 				pbx_log(LOG_ERROR, "SCCP: (sccp_config) Error while creating new var structure\n");
 				pbx_variables_destroy(out);
+				out = NULL;
 				goto EXIT;
 			}
 			tmp = tmp->next;
@@ -1016,7 +1019,7 @@ void sccp_config_cleanup_dynamically_allocated_memory(void * const obj, const sc
 			if (str) {
 				// pbx_log(LOG_NOTICE, "SCCP: Freeing %s='%s'\n", sccpConfigOption[i].name, str);
 				sccp_free(str);
-				str = NULL;
+				*(char **)dst = NULL;
 			}
 		}
 	}
@@ -1941,6 +1944,7 @@ sccp_value_changed_t sccp_config_parse_variables(void * const dest, const size_t
 				if (!(variableList = pbx_variable_new(var_name, var_value, ""))) {
 					pbx_log(LOG_ERROR, SS_Memory_Allocation_Error, "SCCP");
 					variableList = NULL;
+					sccp_free(var_name);
 					break;
 				}
 				variable = variableList;
@@ -1949,6 +1953,7 @@ sccp_value_changed_t sccp_config_parse_variables(void * const dest, const size_t
 					pbx_log(LOG_ERROR, SS_Memory_Allocation_Error, "SCCP");
 					pbx_variables_destroy(variableList);
 					variableList = NULL;
+					sccp_free(var_name);
 					break;
 				}
 				variable = variable->next;
@@ -2271,6 +2276,7 @@ sccp_value_changed_t sccp_config_addButton(sccp_buttonconfig_list_t * buttonconf
 	SCCP_LIST_LOCK(buttonconfigList);
 	if (!(config = (sccp_buttonconfig_t *)sccp_calloc(1, sizeof(sccp_buttonconfig_t)))) {
 		pbx_log(LOG_ERROR, SS_Memory_Allocation_Error, "SCCP");
+		SCCP_LIST_UNLOCK(buttonconfigList);
 		return SCCP_CONFIG_CHANGE_ERROR;
 	}
 	config->index = buttonindex;
@@ -2964,11 +2970,12 @@ sccp_config_file_status_t sccp_config_getConfig(boolean_t force, const char * co
 	sccp_config_file_status_t res          = 0;
 	char *                    newfilename  = "sccp.conf";
 	struct ast_flags          config_flags = { CONFIG_FLAG_FILEUNCHANGED };
+	/* the previous configuration is replaced below in every case, so release it first (used to leak on every unforced reload) */
+	if (GLOB(cfg)) {
+		pbx_config_destroy(GLOB(cfg));
+		GLOB(cfg) = NULL;
+	}
 	if (force) {
-		if (GLOB(cfg)) {
-			pbx_config_destroy(GLOB(cfg));
-			GLOB(cfg) = NULL;
-		}
 		pbx_clear_flag(&config_flags, CONFIG_FLAG_FILEUNCHANGED);
 	}
 
@@ -3194,9 +3201,11 @@ void sccp_config_softKeySet(PBX_VARIABLE_TYPE * variable, const char * name)
 	if (!softKeySetConfiguration) {
 		// sccp_log((DEBUGCAT_CONFIG + DEBUGCAT_SOFTKEY)) (VERBOSE_PREFIX_3 "Adding Softkeyset: %s\n", name);
 		softKeySetConfiguration = (sccp_softKeySetConfiguration_t *)sccp_calloc(1, sizeof(sccp_softKeySetConfiguration_t));
-		memset(softKeySetConfiguration, 0, sizeof(sccp_softKeySetConfiguration_t));
-
-		sccp_copy_string(softKeySetConfiguration->name, name, sizeof(sccp_softKeySetConfiguration_t));
+		if (!softKeySetConfiguration) {
+			pbx_log(LOG_ERROR, SS_Memory_Allocation_Error, "SCCP");
+			return;
+		}
+		sccp_copy_string(softKeySetConfiguration->name, name, sizeof(softKeySetConfiguration->name));
 		softKeySetConfiguration->numberOfSoftKeySets = 0;
 		softKeySetConfiguration->softkeyCbMap        = NULL;                                        // defaults to static softkeyMapCb
 
@@ -3215,14 +3224,15 @@ void sccp_config_softKeySet(PBX_VARIABLE_TYPE * variable, const char * name)
 				softKeySetConfiguration->softkeyCbMap = sccp_softkeyMap_copyStaticallyMapped();
 			}
 
-			char * uriactionstr = pbx_strdup(variable->value);
-			char * event        = strsep(&uriactionstr, ",");
+			char * uriaction_copy = pbx_strdup(variable->value);                                        /* strsep advances uriactionstr, keep the original for free() */
+			char * uriactionstr   = uriaction_copy;
+			char * event          = strsep(&uriactionstr, ",");
 			if (event && !sccp_strlen_zero(uriactionstr)) {
 				sccp_softkeyMap_replaceCallBackByUriAction(softKeySetConfiguration->softkeyCbMap, labelstr2int(event), uriactionstr);
 			} else {
 				sccp_log(DEBUGCAT_CONFIG)(VERBOSE_PREFIX_3 "SCCP: UriAction softkey (%s) not found, or no uris (%s) specified\n", event, uriactionstr);
 			}
-			sccp_free(uriactionstr);
+			sccp_free(uriaction_copy);
 		} else if (sccp_strcaseequals(variable->name, "onhook")) {
 			keyMode = KEYMODE_ONHOOK;
 		} else if (sccp_strcaseequals(variable->name, "connected")) {
