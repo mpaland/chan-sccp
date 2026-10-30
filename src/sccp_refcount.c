@@ -57,6 +57,15 @@ static enum sccp_refcount_runstate runState = SCCP_REF_STOPPED;
 void sccp_refcount_init(void)
 {
 	sccp_log((DEBUGCAT_REFCOUNT + DEBUGCAT_HIGH)) (VERBOSE_PREFIX_1 "SCCP: (Refcount) init\n");
+	for (uint32_t hash = 0; hash < SCCP_HASH_PRIME; hash++) {
+		SCCP_RWLIST_HEAD_INIT(&objects[hash]);
+	}
+#if CS_REFCOUNT_DEBUG
+	pbx_mutex_init(&refdebug_lock);
+	sccp_ref_debug_log = NULL;
+	ref_debug_size = 0;
+	__rotate_debug_file();
+#endif
 	runState = SCCP_REF_RUNNING;
 }
 
@@ -104,7 +113,7 @@ gcc_inline void * const sccp_refcount_release(const void * * const ptr, const ch
 {
 	void *const obj = (void *const) *ptr;
 #if CS_REFCOUNT_DEBUG
-	sccp_log(DEBUG_REFCOUNT)(VERBOSE_PREFIX_3 "ptr:%p, filename:%s, lineno:%d, function:%s", obk, NULL, 1, filename, lineno, func);
+	sccp_log(DEBUG_REFCOUNT)(VERBOSE_PREFIX_3 "ptr:%p, filename:%s, lineno:%d, function:%s", obj, NULL, 1, filename, lineno, func);
 #endif
 	ao2_ref(obj, -1);
 	*ptr = NULL;
@@ -192,16 +201,7 @@ static struct sccp_refcount_obj_info {
 
 typedef struct refcount_object RefCountedObject;
 
-#ifdef SCCP_ATOMIC
-#define obj_lock NULL
-#else
-#define	obj_lock &obj->lock
-#endif
-
 struct refcount_object {
-#ifndef SCCP_ATOMIC
-	ast_mutex_t lock;
-#endif
 	// volatile CAS32_TYPE refcount;
 	CAS32_TYPE refcount;
 	enum sccp_refcounted_types type;
@@ -216,15 +216,18 @@ struct refcount_object {
 };
 
 
-static ast_rwlock_t objectslock;										// general lock to modify hash table entries
-static struct refcount_objentry{
-	SCCP_RWLIST_HEAD (, RefCountedObject) refCountedObjects  __attribute__((aligned(8)));			//!< one rwlock per hash table entry, used to modify list
-} *objects[SCCP_HASH_PRIME] = {0};										//!< objects hash table
+/*!
+ * objects hash table: SCCP_HASH_PRIME buckets, each a rwlocked list. The buckets are allocated statically and live
+ * from sccp_refcount_init() to sccp_refcount_destroy(), so no global lock is needed to protect the table itself.
+ */
+static SCCP_RWLIST_HEAD(refcount_bucket, RefCountedObject) objects[SCCP_HASH_PRIME];
+#if CS_REFCOUNT_DEBUG
+static ast_mutex_t refdebug_lock;										// protects the debug log file rotation
+#endif
 
 void sccp_refcount_init(void)
 {
 	sccp_log((DEBUGCAT_REFCOUNT + DEBUGCAT_HIGH)) (VERBOSE_PREFIX_1 "SCCP: (Refcount) init\n");
-	pbx_rwlock_init_notracking(&objectslock);								// No tracking to safe cpu cycles
 #if CS_REFCOUNT_DEBUG
 	sccp_ref_debug_log = NULL;
 	ref_debug_size = 0;
@@ -236,51 +239,53 @@ void sccp_refcount_init(void)
 
 void sccp_refcount_destroy(void)
 {
-	uint32_t hash = 0;
-
-	uint32_t type = 0;
 	RefCountedObject * obj = NULL;
+	int numObjects = 0;
 
 	pbx_log(LOG_NOTICE, "SCCP: (Refcount) Shutting Down. Checking Clean Shutdown...\n");
-	int numObjects = 0;
 	runState = SCCP_REF_STOPPED;
-
 	sched_yield();												//make sure all other threads can finish their work first.
 
-	// cleanup if necessary, if everything is well, this should not be necessary
-	ast_rwlock_wrlock(&objectslock);
-	for (type = 0; type < ARRAY_LEN(obj_info); type++) { 							// unwind in order of type priority
-		for (hash = 0; hash < SCCP_HASH_PRIME && objects[hash]; hash++) {
-			SCCP_RWLIST_WRLOCK(&(objects[hash]->refCountedObjects));
-			SCCP_RWLIST_TRAVERSE_SAFE_BEGIN(&(objects[hash]->refCountedObjects), obj, list) {
-				if (obj->type == type) {
-					pbx_log(LOG_NOTICE, "Cleaning up [%3d]=type:%17s, id:%25s, ptr:%15p, refcount:%4d, alive:%4s, size:%4d\n", hash, (obj_info[obj->type]).datatype, obj->identifier, obj, obj->refcount,
-						SCCP_LIVE_MARKER == obj->alive ? "yes" : "no", obj->len);
-					SCCP_RWLIST_REMOVE_CURRENT(list);
-					if ((&obj_info[obj->type])->destructor) {
-						(&obj_info[obj->type])->destructor(obj->data);
+	/* Every object still in the table at this point has been leaked (a missing release or an unbroken reference cycle).
+	 * Report and destroy them in type order (participants before conferences, channels before lines, lines before devices).
+	 * The objects are unlinked under the bucket lock and destroyed outside of it, since a destructor may release other objects. */
+	for (uint32_t type = 0; type < ARRAY_LEN(obj_info); type++) {
+		for (uint32_t hash = 0; hash < SCCP_HASH_PRIME; hash++) {
+			RefCountedObject ** leaked = NULL;
+			uint32_t num_leaked = 0;
+			SCCP_RWLIST_WRLOCK(&objects[hash]);
+			if (SCCP_RWLIST_GETSIZE(&objects[hash]) > 0 && (leaked = (RefCountedObject **)sccp_calloc(SCCP_RWLIST_GETSIZE(&objects[hash]), sizeof(RefCountedObject *)))) {
+				SCCP_RWLIST_TRAVERSE_SAFE_BEGIN(&objects[hash], obj, list) {
+					if (obj->type == type) {
+						SCCP_RWLIST_REMOVE_CURRENT(list);
+						leaked[num_leaked++] = obj;
 					}
-#ifndef SCCP_ATOMIC
-					ast_mutex_destroy(&obj->lock);
-#endif
-					memset(obj, 0, sizeof(RefCountedObject));
-					sccp_free(obj);
-					obj = NULL;
-					numObjects++;
 				}
+				SCCP_RWLIST_TRAVERSE_SAFE_END;
 			}
-			SCCP_RWLIST_TRAVERSE_SAFE_END;
-			SCCP_RWLIST_UNLOCK(&(objects[hash]->refCountedObjects));
-			SCCP_RWLIST_HEAD_DESTROY(&(objects[hash]->refCountedObjects));
-
-			sccp_free(objects[hash]);								// free hashtable entry
-			objects[hash] = NULL;
+			SCCP_RWLIST_UNLOCK(&objects[hash]);
+			for (uint32_t idx = 0; idx < num_leaked; idx++) {
+				obj = leaked[idx];
+				pbx_log(LOG_WARNING, "SCCP: (Refcount) leaked object [%3u]=type:%17s, id:%25s, ptr:%15p, refcount:%4d, alive:%4s, size:%4d\n", hash, obj_info[obj->type].datatype, obj->identifier, obj, obj->refcount,
+					SCCP_LIVE_MARKER == obj->alive ? "yes" : "no", obj->len);
+				obj->alive = 0;
+				if (obj_info[obj->type].destructor) {
+					obj_info[obj->type].destructor(obj->data);
+				}
+				memset(obj, 0, sizeof(RefCountedObject));
+				sccp_free(obj);
+				numObjects++;
+			}
+			if (leaked) {
+				sccp_free(leaked);
+			}
 		}
 	}
-	ast_rwlock_unlock(&objectslock);
-	pbx_rwlock_destroy(&objectslock);
+	for (uint32_t hash = 0; hash < SCCP_HASH_PRIME; hash++) {
+		SCCP_RWLIST_HEAD_DESTROY(&objects[hash]);
+	}
 	if (numObjects) {
-		pbx_log(LOG_WARNING, "SCCP: (Refcount) Note: We found %d objects which had to be forcefully removed during refcount shutdown, see above.\n", numObjects);
+		pbx_log(LOG_WARNING, "SCCP: (Refcount) %d leaked objects were destroyed forcefully during shutdown (see above). Please report this to the developers.\n", numObjects);
 	}
 #if CS_REFCOUNT_DEBUG
 	if (sccp_ref_debug_log) {
@@ -288,6 +293,7 @@ void sccp_refcount_destroy(void)
 		sccp_ref_debug_log = NULL;
 		pbx_log(LOG_NOTICE, "SCCP: ref debug log file: %s closed\n", debug_filename);
 	}
+	pbx_mutex_destroy(&refdebug_lock);
 #endif
 	runState = SCCP_REF_DESTROYED;
 }
@@ -318,41 +324,18 @@ void *const sccp_refcount_object_alloc(size_t size, enum sccp_refcounted_types t
 	obj->len = (uint16_t)size;
 	obj->type = type;
 	obj->refcount = 1;
-#ifndef SCCP_ATOMIC
-	ast_mutex_init(&obj->lock);
-#endif
 	sccp_copy_string(obj->identifier, identifier, sizeof(obj->identifier));
 
 	// generate hash
 	void *ptr = obj->data;
 	uint32_t hash = SCCP_SIMPLE_HASH(ptr);
 
-	if (!objects[hash]) {
-		// create new hashtable head when necessary (should this possibly be moved to refcount_init, to avoid raceconditions ?)
-		ast_rwlock_wrlock(&objectslock);
-		if (!objects[hash]) {										// check again after getting the lock, to see if another thread did not create the head already
-			if (!(objects[hash] = (struct refcount_objentry *) sccp_calloc(sizeof *objects[hash], 1))) {
-				pbx_log(LOG_ERROR, SS_Memory_Allocation_Error, "SCCP: hashtable");
-				sccp_free(obj);
-				obj = NULL;
-				ast_rwlock_unlock(&objectslock);
-				return NULL;
-			}
-			SCCP_RWLIST_HEAD_INIT(&(objects[hash]->refCountedObjects));
-			SCCP_RWLIST_INSERT_HEAD(&(objects[hash]->refCountedObjects), obj, list);
-		}
-		ast_rwlock_unlock(&objectslock);
-	} else {
-		// add object to hash table
-		ast_rwlock_rdlock(&objectslock);
-		SCCP_RWLIST_WRLOCK(&(objects[hash]->refCountedObjects));
-		SCCP_RWLIST_INSERT_HEAD(&(objects[hash]->refCountedObjects), obj, list);
-		SCCP_RWLIST_UNLOCK(&(objects[hash]->refCountedObjects));
-		ast_rwlock_unlock(&objectslock);
-	}
+	obj->alive = SCCP_LIVE_MARKER;
+	SCCP_RWLIST_WRLOCK(&objects[hash]);
+	SCCP_RWLIST_INSERT_HEAD(&objects[hash], obj, list);
+	SCCP_RWLIST_UNLOCK(&objects[hash]);
 
 	sccp_log((DEBUGCAT_REFCOUNT)) (VERBOSE_PREFIX_1 "SCCP: (alloc_obj) Creating new %s %s (%p) inside %p at hash: %d\n", (&obj_info[obj->type])->datatype, identifier, ptr, obj, hash);
-	obj->alive = SCCP_LIVE_MARKER;
 
 #if CS_REFCOUNT_DEBUG
 	if (sccp_ref_debug_log) {
@@ -411,12 +394,12 @@ static gcc_inline int __sccp_refcount_debug(const void *ptr, RefCountedObject * 
 	static char fmt[] = "%p|%s%d|%d|%s|%d|%s|%d|%s:%s\n";
 
 	if (!sccp_ref_debug_log || ref_debug_size > REF_DEBUG_FILE_MAX_SIZE) {			/* check debug file rotation requirement */
-		ast_rwlock_wrlock(&objectslock);
+		pbx_mutex_lock(&refdebug_lock);
 		if (__rotate_debug_file() != 0) {
-			ast_rwlock_unlock(&objectslock);
+			pbx_mutex_unlock(&refdebug_lock);
 			return -1;
 		}
-		ast_rwlock_unlock(&objectslock);
+		pbx_mutex_unlock(&refdebug_lock);
 	}
 	if (sccp_ref_debug_log) {	
 		do {
@@ -479,56 +462,33 @@ static gcc_inline RefCountedObject * sccp_refcount_find_obj(const void * const p
 static gcc_inline void sccp_refcount_remove_obj(const void *ptr)
 {
 	RefCountedObject *obj = NULL;
-	boolean_t cleanup_objects = FALSE;
 
 	if (ptr == NULL) {
 		return;
 	}
-
 	uint32_t hash = SCCP_SIMPLE_HASH(ptr);
-
 	sccp_log((DEBUGCAT_REFCOUNT)) (VERBOSE_PREFIX_1 "SCCP: (sccp_refcount_remove_obj) Removing %p from hash table at hash: %d\n", ptr, hash);
 
-	if (objects[hash]) {
-		SCCP_RWLIST_WRLOCK(&(objects[hash]->refCountedObjects));
-		SCCP_RWLIST_TRAVERSE_SAFE_BEGIN(&(objects[hash]->refCountedObjects), obj, list) {
-			if (obj->data == ptr && SCCP_LIVE_MARKER != obj->alive) {
-				SCCP_RWLIST_REMOVE_CURRENT(list);
-				break;
-			}
-		}
-		SCCP_RWLIST_TRAVERSE_SAFE_END;
-		if (SCCP_RWLIST_GETSIZE(&(objects[hash]->refCountedObjects)) == 0) {
-			cleanup_objects = TRUE;
-		}
-		SCCP_RWLIST_UNLOCK(&(objects[hash]->refCountedObjects));
-	}
-	if (obj) {
-		sched_yield();											// make sure all other threads can finish their work first.
-		// should resolve lockless refcount SMP issues
-		// BTW we are not allowed to sleep whilst having a reference
-		// fire destructor
-		if (obj && obj->data == ptr && SCCP_LIVE_MARKER != obj->alive) {
-			sccp_log((DEBUGCAT_REFCOUNT)) (VERBOSE_PREFIX_1 "SCCP: (sccp_refcount_remove_obj) Destroying %p at hash: %d\n", obj, hash);
-			if ((&obj_info[obj->type])->destructor) {
-				(&obj_info[obj->type])->destructor(ptr);
-			}
-			memset(obj, 0, sizeof(RefCountedObject));
-			sccp_free(obj);
-			obj = NULL;
+	SCCP_RWLIST_WRLOCK(&objects[hash]);
+	SCCP_RWLIST_TRAVERSE_SAFE_BEGIN(&objects[hash], obj, list) {
+		if (obj->data == ptr) {
+			SCCP_RWLIST_REMOVE_CURRENT(list);
+			break;
 		}
 	}
-	if (cleanup_objects && runState == SCCP_REF_RUNNING && objects[hash]) {
-		ast_rwlock_wrlock(&objectslock);
-		SCCP_RWLIST_WRLOCK(&(objects[hash]->refCountedObjects));
-		if (SCCP_RWLIST_GETSIZE(&(objects[hash]->refCountedObjects)) == 0) {			/* recheck size */
-			SCCP_RWLIST_HEAD_DESTROY(&(objects[hash]->refCountedObjects));
-			sccp_free(objects[hash]);
-			objects[hash] = NULL;
-		} else {
-			SCCP_RWLIST_UNLOCK(&(objects[hash]->refCountedObjects));
+	SCCP_RWLIST_TRAVERSE_SAFE_END;
+	SCCP_RWLIST_UNLOCK(&objects[hash]);
+
+	if (obj && obj->data == ptr) {
+		/* the object is unreachable now (not in the table, alive marker cleared, refcount 0): run the destructor outside any lock */
+		sccp_log((DEBUGCAT_REFCOUNT)) (VERBOSE_PREFIX_1 "SCCP: (sccp_refcount_remove_obj) Destroying %p at hash: %d\n", obj, hash);
+		if (obj_info[obj->type].destructor) {
+			obj_info[obj->type].destructor(ptr);
 		}
-		ast_rwlock_unlock(&objectslock);
+		memset(obj, 0, sizeof(RefCountedObject));
+		sccp_free(obj);
+	} else {
+		pbx_log(LOG_ERROR, "SCCP: (sccp_refcount_remove_obj) %p could not be found in the hash table (Major Logic Error). Please report to developers\n", ptr);
 	}
 }
 
@@ -575,7 +535,6 @@ void sccp_refcount_gen_report(const void * const ptr, pbx_str_t **buf)
 		{ obj, depth },
 		{ NULL, 0 },
 	};
-	ast_rwlock_rdlock(&objectslock);
 	sccp_refcount_gen_report1(obj, relations, buf, depth);
 	for(uint x = 0; x < max_relations; x++) {
 		if(relations[x].obj == NULL)
@@ -584,7 +543,6 @@ void sccp_refcount_gen_report(const void * const ptr, pbx_str_t **buf)
 		pbx_str_append(buf, 0, "%.*s- %-11.11s %-25.25s (%15p), cnt:%-4.4d, live:%-1.1s\n", 4 - relations[x].depth, " ", (obj_info[obj->type]).datatype, obj->identifier, obj, obj->refcount,
 			       SCCP_LIVE_MARKER == obj->alive ? "y" : "n");
 	}
-	ast_rwlock_unlock(&objectslock);
 
 	pbx_str_append(buf, 0, "==========================================================================================\n");
 }
@@ -611,14 +569,13 @@ int sccp_show_refcount(int fd, sccp_cli_totals_t *totals, struct mansession *s, 
 		}
 	}
 
-	ast_rwlock_rdlock(&objectslock);
 #	define CLI_AMI_TABLE_NAME           Refcount
 #	define CLI_AMI_TABLE_PER_ENTRY_NAME Entry
 #	define CLI_AMI_TABLE_ITERATOR       for(bucket = 0; bucket < SCCP_HASH_PRIME; bucket++)
 #	define CLI_AMI_TABLE_BEFORE_ITERATION                                                                                                                \
-		if(objects[bucket]) {                                                                                                                         \
-			SCCP_RWLIST_RDLOCK(&(objects[bucket]->refCountedObjects));                                                                            \
-			SCCP_RWLIST_TRAVERSE(&(objects[bucket]->refCountedObjects), obj, list) {                                                              \
+		{                                                                                                                         \
+			SCCP_RWLIST_RDLOCK(&(objects[bucket]));                                                                            \
+			SCCP_RWLIST_TRAVERSE(&(objects[bucket]), obj, list) {                                                              \
 				char bucketstr[8];                                                                                                            \
 				if(!s) {                                                                                                                      \
 					if(prev == bucket) {                                                                                                  \
@@ -668,10 +625,10 @@ int sccp_show_refcount(int fd, sccp_cli_totals_t *totals, struct mansession *s, 
 				prev = bucket;										\
 				numentries++;										\
 			}												\
-			if (maxdepth < SCCP_RWLIST_GETSIZE(&(objects[bucket]->refCountedObjects))) {			\
-				maxdepth = SCCP_RWLIST_GETSIZE(&(objects[bucket]->refCountedObjects));			\
+			if (maxdepth < SCCP_RWLIST_GETSIZE(&(objects[bucket]))) {			\
+				maxdepth = SCCP_RWLIST_GETSIZE(&(objects[bucket]));			\
 			}												\
-			SCCP_RWLIST_UNLOCK(&(objects[bucket]->refCountedObjects));					\
+			SCCP_RWLIST_UNLOCK(&(objects[bucket]));					\
 		}
 
 #define CLI_AMI_TABLE_FIELDS 												\
@@ -685,7 +642,6 @@ int sccp_show_refcount(int fd, sccp_cli_totals_t *totals, struct mansession *s, 
 	CLI_AMI_TABLE_FIELD(Size,	"-4.4",		d,	4,	obj->len)
 #include "sccp_cli_table.h"
 	local_line_total++;
-	ast_rwlock_unlock(&objectslock);
 
 	// FillFactor
 	fillfactor = (float) numentries / SCCP_HASH_PRIME;
@@ -723,19 +679,17 @@ int sccp_refcount_force_release(long findobj, char *identifier)
 	RefCountedObject *obj = NULL;
 	void *ptr = NULL;
 
-	ast_rwlock_rdlock(&objectslock);
 	for (hash = 0; hash < SCCP_HASH_PRIME; hash++) {
-		if (objects[hash]) {
-			SCCP_RWLIST_RDLOCK(&(objects[hash]->refCountedObjects));
-			SCCP_RWLIST_TRAVERSE(&(objects[hash]->refCountedObjects), obj, list) {
+		{
+			SCCP_RWLIST_RDLOCK(&(objects[hash]));
+			SCCP_RWLIST_TRAVERSE(&(objects[hash]), obj, list) {
 				if (sccp_strequals(obj->identifier, identifier) && (long) obj == findobj) {
 					ptr = obj->data;
 				}
 			}
-			SCCP_RWLIST_UNLOCK(&(objects[hash]->refCountedObjects));
+			SCCP_RWLIST_UNLOCK(&(objects[hash]));
 		}
 	}
-	ast_rwlock_unlock(&objectslock);
 	if (ptr) {
 		sccp_log(DEBUGCAT_CORE) (VERBOSE_PREFIX_1 "Forcefully releasing one instance of %s\n", identifier);
 		sccp_refcount_release((const void ** const)&ptr, __FILE__, __LINE__, __PRETTY_FUNCTION__);
@@ -807,10 +761,20 @@ gcc_inline void * const sccp_refcount_retain(const void * const ptr, const char 
 #	if CS_REFCOUNT_DEBUG
 		__sccp_refcount_debug(ptr, obj, 1, filename, lineno, func);
 #	endif
-		// ANNOTATE_HAPPENS_BEFORE(&obj->refcount);
-		// volatile int refcountval = ATOMIC_INCR((&obj->refcount), 1, &obj->lock);
-		int refcountval = ATOMIC_INCR((&obj->refcount), 1, &obj->lock);
-		// ANNOTATE_HAPPENS_AFTER(&obj->refcount);
+		/* increment only while the count is positive: a count of zero means the releasing thread is about to destroy the
+		 * object, retaining it now would resurrect it and lead to a use after free */
+		CAS32_TYPE refcountval = ATOMIC_FETCH(&obj->refcount, NULL);
+		for (;;) {
+			if (refcountval <= 0) {
+				pbx_log(LOG_WARNING, "SCCP: (%-15.15s:%-4.4d (%-35.35s)) refusing to retain %s %s (%p): it is already being destroyed\n", filename, lineno, func, (&obj_info[obj->type])->datatype, obj->identifier, ptr);
+				return NULL;
+			}
+			CAS32_TYPE prev = CAS32(&obj->refcount, refcountval, refcountval + 1, NULL);
+			if (prev == refcountval) {
+				break;
+			}
+			refcountval = prev;
+		}
 		int newrefcountval = refcountval + 1;
 		
 		if (dont_expect( (sccp_globals->debug & (((&obj_info[obj->type])->debugcat + DEBUGCAT_REFCOUNT))) == ((&obj_info[obj->type])->debugcat + DEBUGCAT_REFCOUNT))) {
@@ -847,7 +811,7 @@ gcc_inline void * const sccp_refcount_release(const void * * const ptr, const ch
 	RefCountedObject *obj = NULL;
 	sccp_debug_category_t debugcat = 0;
 
-	if(do_expect((obj = sccp_refcount_find_obj(*ptr, lineno, func)) != NULL && ATOMIC_FETCH((&obj->refcount), &obj->lock) > 0)) {
+	if(do_expect((obj = sccp_refcount_find_obj(*ptr, lineno, func)) != NULL && ATOMIC_FETCH(&obj->refcount, NULL) > 0)) {
 #if CS_REFCOUNT_DEBUG
 		__sccp_refcount_debug((void *) *ptr, obj, -1, filename, lineno, func);
 #endif
@@ -855,15 +819,16 @@ gcc_inline void * const sccp_refcount_release(const void * * const ptr, const ch
 
 		int refcountval = 0;
 		debugcat = (&obj_info[obj->type])->debugcat;
-		// ANNOTATE_HAPPENS_BEFORE(&obj->refcount);
-		do {
-			refcountval = ATOMIC_FETCH((&obj->refcount),&obj->lock);
-			newrefcountval = refcountval - 1;
-		} while ((CAS32(&obj->refcount, refcountval, newrefcountval, &obj->lock)) != refcountval);
-		// ANNOTATE_HAPPENS_AFTER(&obj->refcount);
+		refcountval = ATOMIC_DECR(&obj->refcount, 1, NULL);
+		newrefcountval = refcountval - 1;
+		if (dont_expect(refcountval <= 0)) {
+			pbx_log(LOG_ERROR, "SCCP: (%-15.15s:%-4.4d (%-35.35s)) over-release of %s %s (%p), refcount was already %d (Major Logic Error). Please report to developers\n", filename, lineno, func, (&obj_info[obj->type])->datatype, obj->identifier, *ptr, refcountval);
+			*ptr = NULL;
+			return NULL;
+		}
 		
 		if (dont_expect(newrefcountval == 0)) {
-			int alive = ATOMIC_DECR(&obj->alive, SCCP_LIVE_MARKER, &obj->lock);
+			int alive = ATOMIC_DECR(&obj->alive, SCCP_LIVE_MARKER, NULL);
 			sccp_log((DEBUGCAT_REFCOUNT)) (VERBOSE_PREFIX_1 "SCCP: %-15.15s:%-4.4d (%-35.35s)) (release) Finalizing %p (%p) (alive:%d)\n", filename, lineno, func, obj, *ptr, alive);
 			sccp_refcount_remove_obj(*ptr);
 		} else {
@@ -1050,18 +1015,16 @@ AST_TEST_DEFINE(sccp_refcount_tests)
 	sleep(1);
 
 	/* peer directly inside refcounted objects to see if there are any stranded refcounted objects, which should have been destroyed */
-	ast_rwlock_rdlock(&objectslock);
 	RefCountedObject *obj = NULL;
 	for (loop = 0; loop < SCCP_HASH_PRIME; loop++) {
-		if (objects[loop]) {
-			SCCP_RWLIST_RDLOCK(&(objects[loop]->refCountedObjects));
-			SCCP_RWLIST_TRAVERSE(&(objects[loop]->refCountedObjects), obj, list) {
+		{
+			SCCP_RWLIST_RDLOCK(&(objects[loop]));
+			SCCP_RWLIST_TRAVERSE(&(objects[loop]), obj, list) {
 				pbx_test_validate(test, obj->type != SCCP_REF_TEST);
 			}
-			SCCP_RWLIST_UNLOCK(&(objects[loop]->refCountedObjects));
+			SCCP_RWLIST_UNLOCK(&(objects[loop]));
 		}
 	}
-	ast_rwlock_unlock(&objectslock);
 	sccp_free(object);
 	return AST_TEST_PASS;
 }

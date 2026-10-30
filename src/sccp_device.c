@@ -658,16 +658,9 @@ devicePtr sccp_device_create(const char * id)
 	sccp_log((DEBUGCAT_DEVICE)) (VERBOSE_PREFIX_3 "Init MessageStack\n");
 
 	/* initialize messageStack */
-#ifndef SCCP_ATOMIC
-	pbx_mutex_init(&d->messageStack.lock);
-	sccp_mutex_lock(&d->messageStack.lock);
-#endif
 	for(uint8_t i = 0; i < ARRAY_LEN(d->messageStack.messages); i++) {
 		d->messageStack.messages[i] = NULL;
 	}
-#ifndef SCCP_ATOMIC
-	sccp_mutex_unlock(&d->messageStack.lock);
-#endif
 #if HAVE_ICONV
 	d->privateData->iconv = (iconv_t) -1;
 #endif
@@ -2088,10 +2081,6 @@ void sccp_dev_check_displayprompt(constDevicePtr d)
 	boolean_t message_set = FALSE;
 
 	sccp_dev_clearprompt(d, 0, 0);
-#ifndef SCCP_ATOMIC
-	devicePtr device = (devicePtr) d;									/* discard const */
-	sccp_mutex_lock(&device->messageStack.lock);
-#endif
 	for(int i = SCCP_MESSAGE_PRIORITY_SENTINEL - 1; i >= 0; i--) {
 		if (d->messageStack.messages[i] != NULL && !sccp_strlen_zero(d->messageStack.messages[i])) {
 			sccp_dev_displayprompt(d, 0, 0, d->messageStack.messages[i], 0);
@@ -2099,9 +2088,6 @@ void sccp_dev_check_displayprompt(constDevicePtr d)
 			break;
 		}
 	}
-#ifndef SCCP_ATOMIC
-	sccp_mutex_unlock(&device->messageStack.lock);
-#endif
 	if (!message_set) {
 		sccp_dev_displayprompt(d, 0, 0, SKINNY_DISP_YOUR_CURRENT_OPTIONS, 0);
 		sccp_dev_set_keyset(d, 0, 0, KEYMODE_ONHOOK);							/* this is for redial softkey */
@@ -2591,18 +2577,11 @@ int __sccp_device_destroy(const void *ptr)
 
 	// cleanup message stack
 	{
-#ifndef SCCP_ATOMIC
-		sccp_mutex_lock(&d->messageStack.lock);
-#endif
 		for(uint i = 0; i < SCCP_MESSAGE_PRIORITY_SENTINEL; i++) {
 			if (d->messageStack.messages[i] != NULL) {
 				sccp_free(d->messageStack.messages[i]);
 			}
 		}
-#ifndef SCCP_ATOMIC
-		sccp_mutex_unlock(&d->messageStack.lock);
-		pbx_mutex_destroy(&d->messageStack.lock);
-#endif
 	}
 	
 	// cleanup variables

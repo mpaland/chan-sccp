@@ -284,9 +284,6 @@ channelPtr sccp_channel_allocate(constLinePtr l, constDevicePtr device)
 		channel->scheduler.hangup_id = -1;
 		channel->scheduler.cfwd_noanswer_id = -1;
 		channel->enbloc.digittimeout = GLOB(digittimeout);
-#ifndef SCCP_ATOMIC
-		pbx_mutex_init(&channel->scheduler.lock);
-#endif
 		/* assign virtual functions */
 		channel->getDevice = sccp_channel_getDevice;
 		channel->getLineDevice = sccp_channel_getLineDevice;
@@ -2412,9 +2409,6 @@ int __sccp_channel_destroy(const void * data)
 	sccp_line_release((sccp_line_t **)&channel->line);
 	/* */
 
-#ifndef SCCP_ATOMIC
-	pbx_mutex_destroy(&channel->scheduler.lock);
-#endif
 	sccp_channel_unlock(channel);
 	pbx_mutex_destroy(&channel->lock);
 	return 0;

@@ -63,9 +63,6 @@ struct sccp_channel {
 	} enbloc;
 
 	struct {
-#ifndef SCCP_ATOMIC
-		sccp_mutex_t lock;
-#endif
 		volatile CAS32_TYPE deny;
 		int digittimeout_id;										/*!< Schedule for Timeout on Dialing State */
 		int hangup_id;											/*!< Automatic hangup after invalid/congested indication */

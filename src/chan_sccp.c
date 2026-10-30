@@ -100,9 +100,6 @@ boolean_t sccp_prePBXLoad(void)
 	GLOB(debug) = DEBUGCAT_CORE;
 
 	pbx_rwlock_init(&GLOB(lock));
-#ifndef SCCP_ATOMIC	
-	pbx_mutex_init(&GLOB(usecnt_lock));
-#endif
 
 	/* init refcount */
 	sccp_refcount_init();
@@ -315,9 +312,6 @@ int sccp_preUnload(void)
 #endif
 
 	/* destroy locks */
-#ifndef SCCP_ATOMIC
-	pbx_mutex_destroy(&GLOB(usecnt_lock));
-#endif	
 	pbx_rwlock_destroy(&GLOB(lock));
 	return 0;
 }

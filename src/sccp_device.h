@@ -277,9 +277,6 @@ struct sccp_device {
 	sccp_dtmfmode_t(*getDtmfMode) (constDevicePtr device);
 	
 	struct { 
-#ifndef SCCP_ATOMIC
-		sccp_mutex_t lock;										/*!< Message Stack Lock */
-#endif
 		char *(messages[SCCP_MESSAGE_PRIORITY_SENTINEL]); /*!< Message Stack Array */
 	} messageStack;
 	
