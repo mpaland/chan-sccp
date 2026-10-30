@@ -16,10 +16,6 @@
 
 #include "pbx_impl/ast/ast_announce.h"
 
-#undef pbx_channel_ref
-#define pbx_channel_ref ast_channel_ref
-#undef pbx_channel_unref
-#define pbx_channel_unref ast_channel_unref
 #define sccp_sched_context_destroy sched_context_destroy
 
 #define PBX_ENDPOINT_TYPE struct ast_endpoint
@@ -35,91 +31,9 @@ const char *pbx_getformatname_multiple(char *buf, size_t size, struct ast_format
 /* Redefinitions for asterisk-trunk, need to be sorted  */
 #define pbx_channel_name(x) ast_channel_name(x)
 
-#undef CS_BRIDGEPEERNAME
-#undef pbx_channel_uniqueid
-#undef pbx_channel_flags
-#undef pbx_channel_call_forward
-#undef pbx_channel_appl
-#undef pbx_channel_state
-#undef pbx_channel_pbx
-#undef pbx_channel_hangupcause
-#undef pbx_channel_set_hangupcause
-#undef pbx_channel_softhangup
-#undef pbx_channel_context
-#undef pbx_channel_nativeformats
-#undef pbx_channel_exten
-#undef pbx_channel_priority
-#undef pbx_channel_dialcontext
-#undef pbx_channel_callgroup
-#undef pbx_channel_masq
-#undef pbx_channel_setwhentohangup_tv
-#undef pbx_channel_blocker
-#undef pbx_channel_blockproc
-#undef pbx_channel_tech
-#undef pbx_channel_bridge
-#undef pbx_channel_set_bridge
-#undef pbx_channel_language
-#undef pbx_channel_language_set
-#undef pbx_channel_cdr
-#undef pbx_channel_call_forward_set
-#undef pbx_channel_varshead
-#undef pbx_channel_redirecting_effective_from
-#undef pbx_channel_redirecting_effective_to
-#undef pbx_channel_redirecting_effective_orig
-#undef pbx_channel_connected_id
-#undef pbx_channel_connected_source
-#undef pbx_channel_monitor
-#undef pbx_channel_string2amaflag
-#undef pbx_channel_amaflags2string
-#undef pbx_event_subscribe
-#undef pbx_event_unsubscribe
-#undef pbx_bridge_destroy
-#undef pbx_bridge_new
-#undef pbx_bridge_change_state
 
-#define CS_BRIDGEPEERNAME "DIALEDPEERNAME"
-#define pbx_channel_uniqueid(_a) ast_channel_uniqueid(_a)
-#define pbx_channel_flags(_a) ast_channel_flags(_a)
-#define pbx_channel_call_forward(_a) ast_channel_call_forward(_a)
-#define pbx_channel_appl(_a) ast_channel_appl(_a)
-#define pbx_channel_state(_a) ast_channel_state(_a)
-#define pbx_channel_pbx(_a) ast_channel_pbx(_a)
-#define pbx_channel_hangupcause(_a) ast_channel_hangupcause(_a)
 #define pbx_channel_set_hangupcause(_a, _b) ast_channel_hangupcause_set(_a, _b)
-#define pbx_channel_softhangup(_a) ast_channel_softhangup_internal_flag(_a)
-#define pbx_channel_set_hangupcause(_a, _b) ast_channel_hangupcause_set(_a, _b)
-#define pbx_channel_context(_a) ast_channel_context(_a)
-#define pbx_channel_nativeformats(_a) ast_channel_nativeformats(_a)
-#define pbx_channel_exten(_a) ast_channel_exten(_a)
-#define pbx_channel_priority(_a) ast_channel_priority(_a)
-#define pbx_channel_dialcontext(_a) ast_channel_dialcontext(_a)
-#define pbx_channel_callgroup(_a) ast_channel_callgroup(_a)
-#define pbx_channel_masq(_a) ast_channel_masq(_a)
-#define pbx_channel_setwhentohangup_tv(_a, _b) ast_channel_setwhentohangup_tv(_a, _b)
-#define pbx_channel_blocker(_a) ast_channel_blocker(_a)
-#define pbx_channel_blockproc(_a) ast_channel_blockproc(_a)
-#define pbx_channel_tech(_a) ast_channel_tech(_a)
-#define pbx_channel_bridge(_a) ast_channel_bridge(_a)
-#define pbx_channel_set_bridge(_a, _b) ast_channel_internal_bridge_set(_a, _b)
-#define pbx_channel_language(_a) ast_channel_language(_a)
-#define pbx_channel_language_set(_a,_b) ast_channel_language_set(_a,_b)
-#define pbx_channel_cdr(_a) ast_channel_cdr(_a)
-#define pbx_channel_call_forward_set ast_channel_call_forward_set
-#define pbx_channel_varshead(_a) ast_channel_varshead(_a)
-#define pbx_channel_redirecting_effective_from(_a) ast_channel_redirecting_effective_from(_a)
-#define pbx_channel_redirecting_effective_to(_a) ast_channel_redirecting_effective_to(_a)
-#define pbx_channel_redirecting_effective_orig(_a) ast_channel_redirecting_effective_orig(_a)
-#define pbx_channel_connected_id(_a) ast_channel_connected(_a)->id
-#define pbx_channel_connected_source(_a) ast_channel_connected(_a)->source
-#define pbx_channel_monitor(_a) ast_channel_monitor(_a)
-#define pbx_channel_string2amaflag(_a) ast_channel_string2amaflag(_a)
-#define pbx_channel_amaflags2string(_a) ast_channel_amaflags2string(_a)
-#define pbx_event_subscribe(_a) _a = stasis_subscribe(_a)
-#define pbx_event_unsubscribe(_a) _a = stasis_unsubscribe(_a)
-#define pbx_bridge_destroy(_x, _y) ast_bridge_destroy(_x, _y)
-#define pbx_bridge_new(_a, _b, _c, _d, _e) ast_bridge_base_new(_a, _b, _c, _d, _e)
 #define AST_BRIDGE_CHANNEL_STATE_WAIT BRIDGE_CHANNEL_STATE_WAIT
-#define pbx_bridge_change_state(_a, _b) ((_a)->state) = (_b)
 
 int pbx_manager_register(const char *action, int authority, int (*func) (struct mansession * s, const struct message * m), const char *synopsis, const char *description);
 

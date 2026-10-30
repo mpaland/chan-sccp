@@ -22,7 +22,51 @@
 #define sccp_vasprintf ast_vasprintf
 #define sccp_calloc_cache ast_calloc_cache
 #define sccp_alloca(_size) __builtin_alloca((_size))
-#define CS_BRIDGEPEERNAME "BRIDGEPEER"
+/* ast_channel accessors and other redefinitions (formerly overridden per asterisk version in ast1xx.h) */
+#define pbx_channel_ref ast_channel_ref
+#define pbx_channel_unref ast_channel_unref
+#define CS_BRIDGEPEERNAME "DIALEDPEERNAME"
+#define pbx_channel_uniqueid(_a) ast_channel_uniqueid(_a)
+#define pbx_channel_flags(_a) ast_channel_flags(_a)
+#define pbx_channel_call_forward(_a) ast_channel_call_forward(_a)
+#define pbx_channel_appl(_a) ast_channel_appl(_a)
+#define pbx_channel_state(_a) ast_channel_state(_a)
+#define pbx_channel_pbx(_a) ast_channel_pbx(_a)
+#define pbx_channel_hangupcause(_a) ast_channel_hangupcause(_a)
+#define pbx_channel_set_hangupcause(_a, _b) ast_channel_hangupcause_set(_a, _b)
+#define pbx_channel_softhangup(_a) ast_channel_softhangup_internal_flag(_a)
+#define pbx_channel_context(_a) ast_channel_context(_a)
+#define pbx_channel_nativeformats(_a) ast_channel_nativeformats(_a)
+#define pbx_channel_exten(_a) ast_channel_exten(_a)
+#define pbx_channel_priority(_a) ast_channel_priority(_a)
+#define pbx_channel_dialcontext(_a) ast_channel_dialcontext(_a)
+#define pbx_channel_callgroup(_a) ast_channel_callgroup(_a)
+#define pbx_channel_masq(_a) ast_channel_masq(_a)
+#define pbx_channel_setwhentohangup_tv(_a, _b) ast_channel_setwhentohangup_tv(_a, _b)
+#define pbx_channel_blocker(_a) ast_channel_blocker(_a)
+#define pbx_channel_blockproc(_a) ast_channel_blockproc(_a)
+#define pbx_channel_tech(_a) ast_channel_tech(_a)
+#define pbx_channel_bridge(_a) ast_channel_bridge(_a)
+#define pbx_channel_set_bridge(_a, _b) ast_channel_internal_bridge_set(_a, _b)
+#define pbx_channel_language(_a) ast_channel_language(_a)
+#define pbx_channel_language_set(_a,_b) ast_channel_language_set(_a,_b)
+#define pbx_channel_cdr(_a) ast_channel_cdr(_a)
+#define pbx_channel_call_forward_set ast_channel_call_forward_set
+#define pbx_channel_varshead(_a) ast_channel_varshead(_a)
+#define pbx_channel_redirecting_effective_from(_a) ast_channel_redirecting_effective_from(_a)
+#define pbx_channel_redirecting_effective_to(_a) ast_channel_redirecting_effective_to(_a)
+#define pbx_channel_redirecting_effective_orig(_a) ast_channel_redirecting_effective_orig(_a)
+#define pbx_channel_connected_id(_a) ast_channel_connected(_a)->id
+#define pbx_channel_connected_source(_a) ast_channel_connected(_a)->source
+#define pbx_channel_monitor(_a) ast_channel_monitor(_a)
+#define pbx_channel_string2amaflag(_a) ast_channel_string2amaflag(_a)
+#define pbx_channel_amaflags2string(_a) ast_channel_amaflags2string(_a)
+#define pbx_event_subscribe(_a) _a = stasis_subscribe(_a)
+#define pbx_event_unsubscribe(_a) _a = stasis_unsubscribe(_a)
+#define pbx_bridge_destroy(_x, _y) ast_bridge_destroy(_x, _y)
+#define pbx_bridge_new(_a, _b, _c, _d, _e) ast_bridge_base_new(_a, _b, _c, _d, _e)
+#define pbx_bridge_change_state(_a, _b) ((_a)->state) = (_b)
+
 
 #if !defined(SCANBUILD) && defined(DEV_MODE)
 #define pbx_assert ast_assert
@@ -63,15 +107,7 @@
 #if defined(LOW_MEMORY)
 #  define SCCP_FILE_VERSION(_file, _version)
 #else
-#  if CS_AST_REGISTER_FILE_VERSION
-#    define SCCP_FILE_VERSION(_file, _version) ASTERISK_FILE_VERSION((_file), (_version))
-#  else
-#    if ASTERISK_VERSION_GROUP >= 114
 #      define SCCP_FILE_VERSION(_file, _version)
-#    else
-#      define SCCP_FILE_VERSION(_file, _version) ASTERISK_REGISTER_FILE()
-#    endif
-#  endif
 #endif
 
 // codec / format redefinitions
@@ -108,39 +144,16 @@
 #define pbx_app_separate_args ast_app_separate_args
 #define pbx_bridge_features_init ast_bridge_features_init
 
-#if ASTERISK_VERSION_NUMBER < 11010
-#define pbx_bridge_join(_bridge, _channel, _replace, _features, _tech_optimizations, _flags) ast_bridge_join((_bridge), (_channel), (_replace), (_features))
-#else
-#ifndef CS_BRIDGE_JOIN_PASSREFERENCE
-#define pbx_bridge_join(_bridge, _channel, _replace, _features, _tech_optimizations, _flags) ast_bridge_join((_bridge), (_channel), (_replace), (_features), (_tech_optimizations))
-#else
 #define pbx_bridge_join(_bridge, _channel, _replace, _features, _tech_optimizations, _flags) ast_bridge_join((_bridge), (_channel), (_replace), (_features), (_tech_optimizations), (_flags))
-#endif
-#endif
 
-#ifndef CS_BRIDGE_BASE_NEW
-#define pbx_bridge_new(_a,_b,_c,_d,_e) ast_bridge_new((_a), (_b))
-#else
-#define pbx_bridge_new(_a,_b,_c,_d,_e) ast_bridge_base_new((_a), (_b), (_c), (_d), (_e))
-#endif
 #define pbx_bridge_remove ast_bridge_remove
 #define pbx_bridge_kick ast_bridge_kick
 #define pbx_bridge_result ast_bridge_result
 
-#if ASTERISK_VERSION_GROUP < 110
-#define pbx_bridge_impart(_bridge, _underlying_channel, _swap_channel, _features, _allow_hangup) ast_bridge_impart((_bridge), (_underlying_channel), (_swap_channel), (_features))
-#else
 #define pbx_bridge_impart(_bridge, _underlying_channel, _swap_channel, _features, _allow_hangup) ast_bridge_impart((_bridge), (_underlying_channel), (_swap_channel), (_features), (_allow_hangup))
-#endif
-#ifndef CS_BRIDGE_DEPART_ONLY_CHANNEL
-#define pbx_bridge_depart(_x, _y) ast_bridge_depart((_x),(_y))
-#else
 #define pbx_bridge_depart(_x, _y) ast_bridge_depart((_y))
-#endif
 
-#define pbx_bridge_destroy(_x, _y) ast_bridge_destroy((_x))
 #define pbx_bridge_features_cleanup ast_bridge_features_cleanup
-#define pbx_bridge_change_state ast_bridge_change_state
 #define pbx_bridge_lock ast_bridge_lock
 #define pbx_bridge_unlock ast_bridge_unlock
 #define pbx_bridge_suspend ast_bridge_suspend
@@ -153,15 +166,9 @@
 #define pbx_canmatch_extension ast_canmatch_extension
 #define pbx_category_browse ast_category_browse
 #define pbx_cause ast_cause
-#if ASTERISK_VERSION_GROUP < 112
-#define pbx_ama_flags_type long int 
-#else
 #define pbx_ama_flags_type enum ama_flags
-#endif
 #define pbx_cdr_amaflags2int ast_cdr_amaflags2int
 #define pbx_cdr_flags2str ast_cdr_flags2str
-#define pbx_channel_amaflags2string ast_cdr_flags2str
-#define pbx_channel_string2amaflag ast_cdr_amaflags2int
 #define pbx_cdr_start ast_cdr_start
 #define pbx_cdr_update ast_cdr_update
 #define pbx_channel_defer_dtmf ast_channel_defer_dtmf
@@ -194,22 +201,9 @@
 #define pbx_custom_function ast_custom_function
 #define pbx_db_freetree ast_db_freetree
 
-#if CS_CACHEABLE_DEVICESTATE
 #define pbx_devstate_changed(_a,_b,_c) ast_devstate_changed((_a),AST_DEVSTATE_CACHABLE,(_b),(_c))
 #define pbx_devstate_changed_literal(_a,_b) ast_devstate_changed_literal((_a),AST_DEVSTATE_CACHABLE,(_b))
-#elif defined(CS_DEVICESTATE)
-#define pbx_devstate_changed(_a,_b,_c) ast_devstate_changed((_a),(_b),(_c))
-#define pbx_devstate_changed_literal(_a,_b) ast_devstate_changed_literal((_a),(_b))
-#else
-#define pbx_devstate_changed(_a,_b,_c) ast_device_state_changed((_b),(_c))
-#define pbx_devstate_changed_literal(_a,_b) ast_device_state_changed_literal((_b))
-#endif
 
-#if defined(CS_AST_ENABLE_DISTRIBUTED_DEVSTATE)
-#define pbx_enable_distributed_devstate() ast_enable_distributed_devstate()
-#else
-#define pbx_enable_distributed_devstate()
-#endif
 
 #define pbx_devstate_val ast_devstate_val
 #define pbx_digit_usecs ast_digit_usecs
@@ -226,19 +220,13 @@ typedef struct ast_event pbx_event_t;
 #define pbx_event_sub ast_event_sub
 #endif
 */
-#if defined( HAVE_PBX_STASIS_H )
 #define pbx_event_sub stasis_subscription
 #define pbx_mwi_state_type ast_mwi_state_type
-#else
-#define pbx_event_sub ast_event_sub
-#endif
 typedef struct pbx_event_sub pbx_event_subscription_t;
 #define pbx_mwi_topic                ast_mwi_topic
 #define pbx_mwi_subscribe_pool       ast_mwi_subscribe_pool
 #define pbx_mwi_unsubscribe_and_join ast_mwi_unsubscribe_and_join
 #define pbx_mwi_subscriber           ast_mwi_subscriber
-#define pbx_event_subscribe ast_event_subscribe
-#define pbx_event_unsubscribe ast_event_unsubscribe
 #define pbx_event_queue_and_cache ast_event_queue_and_cache
 #define pbx_exists_extension ast_exists_extension
 #define pbx_extension_state_add ast_extension_state_add
@@ -375,10 +363,6 @@ typedef struct pbx_event_sub pbx_event_subscription_t;
 #define pbx_stream_and_wait ast_stream_and_wait
 #define pbx_say_number ast_say_number
 #define pbx_fileexists ast_fileexists
-#if ASTERISK_VERSION_GROUP < 111 && defined(__clang__)
-#undef AST_STRING_FIELD_ALLOCATION
-#define AST_STRING_FIELD_ALLOCATION(_x) *((ast_string_field_allocation *) ((ast_string_field_allocation)(_x) - __alignof__(ast_string_field_allocation)))
-#endif
 #define pbx_string_field_build ast_string_field_build
 #define pbx_string_field_set ast_string_field_set
 #define pbx_strip ast_strip
@@ -386,10 +370,6 @@ typedef struct pbx_event_sub pbx_event_subscription_t;
 #define pbx_true ast_true
 #define pbx_false ast_false
 #define pbx_tvnow ast_tvnow
-#if CS_AST_REGISTER_FILE_VERSION
-#define pbx_register_file_version ast_register_file_version
-#define pbx_unregister_file_version ast_unregister_file_version
-#endif
 #define pbx_update_use_count ast_update_use_count
 #define pbx_variable_browse ast_variable_browse
 #define pbx_variable_new ast_variable_new
@@ -397,11 +377,7 @@ typedef struct pbx_event_sub pbx_event_subscription_t;
 #define pbx_variables_destroy ast_variables_destroy
 #define pbx_strlen_zero ast_strlen_zero
 #define pbx_context_find ast_context_find
-#if CS_AST_HAS_CONTEXT_DESTROY_BY_NAME
 #define pbx_context_destroy_by_name ast_context_destroy_by_name
-#else
-#define pbx_context_destroy_by_name ast_context_destroy
-#endif
 #define pbx_context_destroy ast_context_destroy
 #define PBX_CONTEXT_TYPE struct ast_context
 #define pbx_hangup ast_hangup
@@ -412,41 +388,8 @@ typedef struct pbx_event_sub pbx_event_subscription_t;
 #define pbx_set2_flag ast_set2_flag
 
 // Fixes for asterisk-trunk, need to sorted later
-#define pbx_channel_flags(_a) (_a)										/* needed in asterisk trunk */
-#define pbx_channel_uniqueid(_a) (_a)->uniqueid
-#define pbx_channel_call_forward(_a) (_a)->call_forward
-#define pbx_channel_appl(_a) (_a)->appl
-#define pbx_channel_state(_a) (_a)->_state
-#define pbx_channel_pbx(_a) (_a)->pbx
-#define pbx_channel_hangupcause(_a) (_a)->hangupcause
-#define pbx_channel_set_hangupcause(_a,_b) (_a)->hangupcause = (_b)
-#define pbx_channel_softhangup(_a) (_a)->_softhangup
-#define pbx_channel_context(_a) (_a)->context
-#define pbx_channel_nativeformats(_a) (_a)->nativeformats
-#define pbx_channel_exten(_a) (_a)->exten
-#define pbx_channel_priority(_a) (_a)->priority
-#define pbx_channel_dialcontext(_a) (_a)->dialcontext
-#define pbx_channel_callgroup(_a) (_a)->callgroup
-#define pbx_channel_masq(_a) (_a)->masq
-#define pbx_channel_setwhentohangup_tv(_a, _b) (_a)->whentohangup = (_b)
-#define pbx_channel_blocker(_a) (_a)->blocker
-#define pbx_channel_blockproc(_a) (_a)->blockproc
-#define pbx_channel_tech(_a) (_a)->tech
-#define pbx_channel_bridge(_a) (_a)->bridge
-#define pbx_channel_set_bridge(_a,_b) (_a)->bridge = (_b)
-#define pbx_channel_language(_a) (_a)->language
-#define pbx_channel_cdr(_a) (_a)->cdr
-#define pbx_channel_call_forward_set(_a,_b) ast_string_field_set((_a), call_forward, (_b));
-#define pbx_channel_varshead(_a) &(_a)->varshead
 #define pbx_pickup_call ast_pickup_call
-#define pbx_channel_monitor(_a) (_a)->monitor
 
-#define pbx_bridge_change_state ast_bridge_change_state
-#define pbx_channel_redirecting_effective_from(_a) (_a)->redirecting.from
-#define pbx_channel_redirecting_effective_to(_a) (_a)->redirecting.to
-#define pbx_channel_redirecting_effective_orig(_a) (_a)->redirecting.orig
-#define pbx_channel_connected_id(_a) (_a)->connected.id
-#define pbx_channel_connected_source(_a) (_a)->connected.source
 #define pbx_connected_line_source_name(_a) ast_connected_line_source_name(_a)
 
 #define pbx_streamfile ast_streamfile
@@ -460,15 +403,9 @@ typedef struct pbx_event_sub pbx_event_subscription_t;
 #endif
 #endif
 #define pbx_channel_callid ast_channel_callid
-#if !defined(CS_AST_CHANNEL_CALLID_TYPEDEF)
-#	define pbx_callid_t                           struct ast_callid *
-#	define pbx_channel_callid_set(_chan, _callid) ast_channel_callid_set(_chan, (struct ast_callid *)_callid)
-#	define pbx_callid_threadassoc_add(_callid)    ast_callid_threadassoc_add((struct ast_callid *)_callid)
-#else
 #	define pbx_callid_t                           ast_callid
 #	define pbx_channel_callid_set(_chan, _callid) ast_channel_callid_set(_chan, (ast_callid)_callid)
 #	define pbx_callid_threadassoc_add(_callid)    ast_callid_threadassoc_add((ast_callid)_callid)
-#endif
 #define pbx_create_callid             (pbx_callid_t) ast_create_callid
 #define pbx_callid_threadassoc_remove ast_callid_threadassoc_remove
 
