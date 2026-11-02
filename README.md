@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/mpaland/chan-sccp/actions/workflows/ccpp.yml/badge.svg?branch=develop)](https://github.com/mpaland/chan-sccp/actions/workflows/ccpp.yml)
 [![CodeQL](https://github.com/mpaland/chan-sccp/actions/workflows/codeql-analysis.yml/badge.svg?branch=develop)](https://github.com/mpaland/chan-sccp/actions/workflows/codeql-analysis.yml)
-[![Asterisk](https://img.shields.io/badge/Asterisk-20%20%7C%2021%20%7C%2022%20%7C%2024-orange?logo=asterisk)](https://www.asterisk.org/)
+[![Asterisk](https://img.shields.io/badge/Asterisk-20%20%7C%2022%20%7C%2024-orange?logo=asterisk)](https://www.asterisk.org/)
 [![Last commit](https://img.shields.io/github/last-commit/mpaland/chan-sccp/develop?logo=git)](https://github.com/mpaland/chan-sccp/commits/develop)
 [![License](https://img.shields.io/badge/license-GPL-blue)](LICENSE)
 [![Documentation](https://img.shields.io/badge/docs-wiki-blue?logo=github)](https://github.com/chan-sccp/chan-sccp/wiki)
@@ -15,14 +15,14 @@ behind this fork is in [doc/ANALYSIS.md](doc/ANALYSIS.md), the change summary in
 For building and installation instructions please see the [INSTALL](INSTALL) file.
 
 
-This is a fork of the [chan-sccp](https://github.com/chan-sccp/chan-sccp), lately maintained by Diederik de Groot. Unfortunately there hasn't been any progress the last years but Asterisk keeps moving on.  
-I took all available PRs and used AI to analyze and fix further bugs. Result is this repo here.
-Why the effort? Because Cisco built with the 7900 series the best phones ever. A rocksolid hardware, excellent buttons, a touch display on office models and a timeless design. Unfortunately, all following series got worse and worse.  
-The SIP version of these phones neve got the love of Cisco and even the final version had several bugs, so the SCCP protocol is the way to go.  
-I wanted to keep up all the work of Diederik and want to use my beloved 7975 phones the next decade.  
+### About this fork
+This is a fork of the [chan-sccp](https://github.com/chan-sccp/chan-sccp), lately maintained by Diederik de Groot. Unfortunately there hasn't been any progress since 2023 but Asterisk keeps moving on.  
+I merged/implemented all available PRs, removed any support for all Asterisk EOL versions (<20) and used AI to analyze and fix further bugs. The result is this repo here.  
+Why the effort? Because Cisco has built with the 7900 series the best VoIP phones ever. IMHO. A rocksolid hardware, excellent buttons, wideband audio, a big touch display on office models and a timeless design. Unfortunately, all following series got worse and worse.  
+The SIP firmware of these phones never got much love of Cisco and even the final version has several bugs, so the SCCP protocol is the way to go.  
+I wanted to keep up all the outstanding work of Diederik and like to use my beloved 7975 phones the next decade.  
+Please feel free to use and test this fork. Any Feedback is welcome.  
 The original project is at [chan-sccp/chan-sccp](https://github.com/chan-sccp/chan-sccp) and accepts donations via [Liberapay](https://liberapay.com/chan-sccp/donate).
-
-
 
 
 ### Table of Contents
