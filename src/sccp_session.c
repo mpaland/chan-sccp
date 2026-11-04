@@ -810,6 +810,14 @@ gcc_inline void recalc_wait_time(sccp_session_t *s)
 		}
 	}
        s->keepAlive = (uint16_t)(keepAlive * keepaliveAdditionalTimePercent);
+       /* the model list above is not a statement about any phone's timekeeping: a phone missing from it was
+        * reaped after 5% of jitter. Tolerate at least half again the negotiated interval, only ever upward. */
+       if (keepAliveInterval > 0) {
+	       uint16_t derived = (uint16_t)(keepAliveInterval * 1.5f);
+	       if (derived > s->keepAlive) {
+		       s->keepAlive = derived;
+	       }
+       }
        //s->keepAliveInterval = (uint16_t)(keepAliveInterval * KEEPALIVE_ADDITIONAL_PERCENT_SESSION);
        s->keepAliveInterval = (uint16_t)keepAliveInterval;
 
@@ -868,9 +876,10 @@ void *sccp_session_device_thread(void *session)
 				recalc_wait_time(s);
 				oncall = (d->active_channel) ? TRUE : FALSE;
 			}
-			if (d->status.token == SCCP_TOKEN_STATE_ACK) {
-				tokenThread = TRUE;								// only does TCP-Keepalive
-			}
+			/* exempt from the keepalive timeout only while waiting for the phone to come back after a token ack.
+			 * This latched TRUE and never cleared, so every phone registered through a token handshake had a
+			 * session that could never time out (TCP keepalive is not enabled on the socket). */
+			tokenThread = (d->status.token == SCCP_TOKEN_STATE_ACK);
 		}
 		sccp_log_and((DEBUGCAT_SOCKET + DEBUGCAT_HIGH))(VERBOSE_PREFIX_4 "%s: set poll timeout %d for session %d\n", DEV_ID_LOG(s->device), (int)s->keepAliveInterval, fds[0].fd);
 
