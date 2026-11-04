@@ -406,7 +406,9 @@ void handle_XMLAlarmMessage(constSessionPtr s, devicePtr no_d, constMessagePtr m
 	   char neighborPortID[StationMaxNameSize];
 	 */
 
-	char *xmlData = pbx_strdupa((char *) &msg_in->data.XMLAlarmMessage);
+	/* the alarm text comes from the (not yet registered) phone: copy it bounded, the field need not be terminated */
+	char xmlData[sizeof(msg_in->data.XMLAlarmMessage.le_data) + 1];
+	sccp_copy_string(xmlData, msg_in->data.XMLAlarmMessage.le_data, sizeof(xmlData));
 	char *state = "";
 	char *line = "";
 
@@ -418,16 +420,17 @@ void handle_XMLAlarmMessage(constSessionPtr s, devicePtr no_d, constMessagePtr m
 		   sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_2 "Device Name: %s\n", deviceName);
 		   }
 		 */
-		if (sscanf(line, "<Alarm Name=\"%[a-zA-Z]\">", alarmName) == 1) {
+		/* every %[ conversion is bounded by the size of its buffer (101) minus the terminator */
+		if (sscanf(line, "<Alarm Name=\"%100[a-zA-Z]\">", alarmName) == 1) {
 			sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_2 "Alarm Type: %s\n", alarmName);
 		}
 		if (sscanf(line, "<Enum name=\"ReasonForOutOfService\">%d</Enum>>", &reasonEnum) == 1) {
 			sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_2 "Reason Enum: %d\n", reasonEnum);
 		}
-		if (sscanf(line, "<String name=\"LastProtocolEventSent\">%[^<]</String>", lastProtocolEventSent) == 1) {
+		if (sscanf(line, "<String name=\"LastProtocolEventSent\">%100[^<]</String>", lastProtocolEventSent) == 1) {
 			sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_2 "Last Event Sent: %s\n", lastProtocolEventSent);
 		}
-		if (sscanf(line, "<String name=\"LastProtocolEventReceived\">%[^<]</String>", lastProtocolEventReceived) == 1) {
+		if (sscanf(line, "<String name=\"LastProtocolEventReceived\">%100[^<]</String>", lastProtocolEventReceived) == 1) {
 			sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_2 "Last Event Received: %s\n", lastProtocolEventReceived);
 		}
 
@@ -462,7 +465,9 @@ void handle_XMLAlarmMessage(constSessionPtr s, devicePtr no_d, constMessagePtr m
  */
 void handle_LocationInfoMessage(constSessionPtr s, devicePtr d, constMessagePtr msg_in)
 {
-	char *xmldata = pbx_strdupa(msg_in->data.LocationInfoMessage.xmldata);
+	/* the field fills the largest message: when the phone fills it completely there is no terminator in the message */
+	char xmldata[sizeof(msg_in->data.LocationInfoMessage.xmldata) + 1];
+	sccp_copy_string(xmldata, msg_in->data.LocationInfoMessage.xmldata, sizeof(xmldata));
 	sccp_log(DEBUGCAT_DEVICE)(VERBOSE_PREFIX_2 "SCCP: LocationInfo (WIFI) Message: %s\n", xmldata);
 	
 	if ((GLOB(debug) & DEBUGCAT_MESSAGE) != 0) {								// only show when debugging messages
@@ -489,12 +494,12 @@ void handle_LocationInfoMessage(constSessionPtr s, devicePtr d, constMessagePtr 
  */
 void handle_token_request(constSessionPtr s, devicePtr no_d, constMessagePtr msg_in)
 {
-	char *deviceName = "";
+	char deviceName[StationMaxDeviceNameSize];
 	uint32_t serverPriority = GLOB(server_priority);
 	uint32_t deviceInstance = 0;
 	skinny_devicetype_t deviceType = SKINNY_DEVICETYPE_UNDEFINED;
 
-	deviceName = pbx_strdupa(msg_in->data.RegisterTokenRequest.sId.deviceName);
+	sccp_copy_string(deviceName, msg_in->data.RegisterTokenRequest.sId.deviceName, sizeof(deviceName));
 	deviceInstance = letohl(msg_in->data.RegisterTokenRequest.sId.lel_instance);
 	deviceType = letohl(msg_in->data.RegisterTokenRequest.lel_deviceType);
 	int token_backoff_time = GLOB(token_backoff_time) >= 30 ? GLOB(token_backoff_time) : 60;
@@ -502,6 +507,12 @@ void handle_token_request(constSessionPtr s, devicePtr no_d, constMessagePtr msg
 	if (GLOB(reload_in_progress)) {
 		pbx_log(LOG_NOTICE, "SCCP: Reload in progress. Come back later.\n");
 		sccp_session_tokenReject(s, 10);
+		return;
+	}
+	/* a nameless request identifies nothing and would build an anonymous device without endpoint */
+	if (sccp_strlen_zero(deviceName)) {
+		pbx_log(LOG_WARNING, "SCCP: Token request without a device name, rejecting.\n");
+		sccp_session_tokenReject(s, token_backoff_time);
 		return;
 	}
 	if (!sccp_strlen_zero(GLOB(token_fallback))) {
@@ -542,12 +553,14 @@ void handle_token_request(constSessionPtr s, devicePtr no_d, constMessagePtr msg
 	// Search for the device (including realtime), if does not exist and hotline is requested create one.
 	AUTO_RELEASE(sccp_device_t, device, sccp_device_find_byid(deviceName, TRUE));
 	if (!device && GLOB(allowAnonymous)) {
-		device = sccp_device_createAnonymous(msg_in->data.RegisterTokenRequest.sId.deviceName) /*ref_replace*/;
-		sccp_config_applyDeviceConfiguration(device, NULL);
-		sccp_config_addButton(&device->buttonconfig, 1, LINE, GLOB(hotline)->line ? GLOB(hotline)->line->name : "hotline", NULL, NULL);
-		//sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_3 "%s: hotline name: %s\n", deviceName, GLOB(hotline)->line->name);
-		device->defaultLineInstance = SCCP_FIRST_LINEINSTANCE;
-		sccp_device_addToGlobals(device);
+		device = sccp_device_createAnonymous(deviceName) /*ref_replace*/;
+		if (device) {
+			sccp_config_applyDeviceConfiguration(device, NULL);
+			sccp_config_addButton(&device->buttonconfig, 1, LINE, GLOB(hotline)->line ? GLOB(hotline)->line->name : "hotline", NULL, NULL);
+			//sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_3 "%s: hotline name: %s\n", deviceName, GLOB(hotline)->line->name);
+			device->defaultLineInstance = SCCP_FIRST_LINEINSTANCE;
+			sccp_device_addToGlobals(device);
+		}
 	}
 
 	/* no configuation for this device and no anonymous devices allowed */
@@ -674,18 +687,24 @@ EXIT:
  */
 void handle_SPCPTokenReq(constSessionPtr s, devicePtr no_d, constMessagePtr msg_in)
 {
-	char *deviceName = "";
+	char deviceName[StationMaxDeviceNameSize];
 	uint32_t deviceInstance = 0;
 	skinny_devicetype_t deviceType = SKINNY_DEVICETYPE_UNDEFINED;
 
 	deviceInstance = letohl(msg_in->data.SPCPRegisterTokenRequest.sId.lel_instance);
-	deviceName = pbx_strdupa(msg_in->data.RegisterTokenRequest.sId.deviceName);
+	sccp_copy_string(deviceName, msg_in->data.SPCPRegisterTokenRequest.sId.deviceName, sizeof(deviceName));
 	deviceType = letohl(msg_in->data.SPCPRegisterTokenRequest.lel_deviceType);
 	int token_backoff_time = GLOB(token_backoff_time) >= 30 ? GLOB(token_backoff_time) : 60;
 
 	if (GLOB(reload_in_progress)) {
 		pbx_log(LOG_NOTICE, "SCCP: Reload in progress. Come back later.\n");
 		sccp_session_tokenReject(s, 10);
+		return;
+	}
+	/* a nameless request identifies nothing and would build an anonymous device without endpoint */
+	if (sccp_strlen_zero(deviceName)) {
+		pbx_log(LOG_WARNING, "SCCP: SPCP token request without a device name, rejecting.\n");
+		sccp_session_tokenRejectSPCP(s, token_backoff_time);
 		return;
 	}
 
@@ -730,17 +749,19 @@ void handle_SPCPTokenReq(constSessionPtr s, devicePtr no_d, constMessagePtr msg_
 	// search for all devices including realtime
 	AUTO_RELEASE(sccp_device_t, device, sccp_device_find_byid(deviceName, TRUE));
 	if (!device && GLOB(allowAnonymous)) {
-		device = sccp_device_createAnonymous(msg_in->data.SPCPRegisterTokenRequest.sId.deviceName) /*ref_replace*/;
-		sccp_config_applyDeviceConfiguration(device, NULL);
-		sccp_config_addButton(&device->buttonconfig, 1, LINE, GLOB(hotline)->line ? GLOB(hotline)->line->name : "hotline", NULL, NULL);
-		//sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_3 "%s: hotline name: %s\n", msg_in->data.SPCPRegisterTokenRequest.sId.deviceName, GLOB(hotline)->line->name);
-		device->defaultLineInstance = SCCP_FIRST_LINEINSTANCE;
-		sccp_device_addToGlobals(device);
+		device = sccp_device_createAnonymous(deviceName) /*ref_replace*/;
+		if (device) {
+			sccp_config_applyDeviceConfiguration(device, NULL);
+			sccp_config_addButton(&device->buttonconfig, 1, LINE, GLOB(hotline)->line ? GLOB(hotline)->line->name : "hotline", NULL, NULL);
+			//sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_3 "%s: hotline name: %s\n", deviceName, GLOB(hotline)->line->name);
+			device->defaultLineInstance = SCCP_FIRST_LINEINSTANCE;
+			sccp_device_addToGlobals(device);
+		}
 	}
 
 	/* no configuation for this device and no anonymous devices allowed */
 	if (!device) {
-		pbx_log(LOG_NOTICE, "%s: Rejecting device: not found\n", msg_in->data.SPCPRegisterTokenRequest.sId.deviceName);
+		pbx_log(LOG_NOTICE, "%s: Rejecting device: not found\n", deviceName);
 		sccp_session_tokenRejectSPCP(s, 60);
 		return;
 	}
@@ -820,6 +841,14 @@ void handle_register(constSessionPtr s, devicePtr maybe_d, constMessagePtr msg_i
 	if (GLOB(reload_in_progress)) {
 		pbx_log(LOG_NOTICE, "SCCP: Reload in progress. Come back later.\n");
 		sccp_session_reject(s, "Reload in progress");
+		return;
+	}
+
+	/* a Register without a device name identifies nothing and would build an anonymous device around an
+	 * empty id, which never gets an endpoint: refuse it before any device is created */
+	if (sccp_strlen_zero(deviceName)) {
+		pbx_log(LOG_WARNING, "SCCP: Register message without a device name, rejecting session.\n");
+		sccp_session_reject(s, "Invalid DeviceName");
 		return;
 	}
 
@@ -2562,18 +2591,28 @@ void handle_capabilities_res(constSessionPtr s, devicePtr d, constMessagePtr msg
 #endif
 	skinny_codec_t codec = 0;
 
-	uint8_t n = letohl(msg_in->data.CapabilitiesResMessage.lel_count);
+	/* the count comes from the phone: clamp it to the caps[] the message can hold, which also bounds the
+	 * writes into d->capabilities (same size) */
+	uint32_t n = letohl(msg_in->data.CapabilitiesResMessage.lel_count);
+	if (n > ARRAY_LEN(msg_in->data.CapabilitiesResMessage.caps)) {
+		pbx_log(LOG_WARNING, "%s: Capabilities count %u out of bounds, clamping to %d\n", DEV_ID_LOG(d), n, (int)ARRAY_LEN(msg_in->data.CapabilitiesResMessage.caps));
+		n = ARRAY_LEN(msg_in->data.CapabilitiesResMessage.caps);
+	}
 
 	sccp_log((DEBUGCAT_CORE + DEBUGCAT_DEVICE)) (VERBOSE_PREFIX_3 "%s: Device has %d Capabilities\n", DEV_ID_LOG(d), n);
 	for(uint i = 0; i < n; i++) {
 		codec = letohl(msg_in->data.CapabilitiesResMessage.caps[i].lel_payloadCapability);
 		if (codec2type(codec) == SKINNY_CODEC_TYPE_AUDIO) {
-			d->capabilities.audio[numAudioCodecs++] = codec;
+			if (numAudioCodecs < ARRAY_LEN(d->capabilities.audio)) {
+				d->capabilities.audio[numAudioCodecs++] = codec;
+			}
 			//sccp_log((DEBUGCAT_DEVICE)) (VERBOSE_PREFIX_3 "%s: Added audio codec %-25s (%d)\n", d->id, codec2str(codec), codec);
 		} else
 #ifdef CS_SCCP_VIDEO
 		if (codec2type(codec) == SKINNY_CODEC_TYPE_VIDEO) {
-			d->capabilities.video[numVideoCodecs++] = codec;
+			if (numVideoCodecs < ARRAY_LEN(d->capabilities.video)) {
+				d->capabilities.video[numVideoCodecs++] = codec;
+			}
 			//sccp_log((DEBUGCAT_DEVICE)) (VERBOSE_PREFIX_3 "%s: Added video codec %-25s (%d)\n", d->id, codec2str(codec), codec);
 		} else
 #endif
@@ -3230,7 +3269,7 @@ void handle_soft_key_event(constSessionPtr s, devicePtr d, constMessagePtr msg_i
 	uint32_t lineInstance = letohl(msg_in->data.SoftKeyEventMessage.lel_lineInstance);
 	uint32_t callid = letohl(msg_in->data.SoftKeyEventMessage.lel_callReference);
 
-	if ((int)event - 1 < 0 || (int)event - 1 > (int)ARRAY_LEN(softkeysmap) - 1) {
+	if (event == 0 || event > ARRAY_LEN(softkeysmap)) {
 		pbx_log(LOG_ERROR, "SCCP: Received Softkey Event is out of bounds of softkeysmap (0 < %ld < %ld). Exiting\n", (long)(letohl(msg_in->data.SoftKeyEventMessage.lel_softKeyEvent) - 1), (long)ARRAY_LEN(softkeysmap));
 		return;
 	}
@@ -3769,7 +3808,7 @@ void handle_ConnectionStatistics(constSessionPtr s, devicePtr device, constMessa
 		// update last_call_statistics
 		sccp_call_statistics_t *call_stats = d->call_statistics;
 
-		if (letohl(msg_in->header.lel_protocolVer < 20)) {
+		if (letohl(msg_in->header.lel_protocolVer) < 20) {
 			call_stats[SCCP_CALLSTATISTIC_LAST].num = letohl(msg_in->data.ConnectionStatisticsRes.v3.lel_CallIdentifier);
 			call_stats[SCCP_CALLSTATISTIC_LAST].packets_sent = letohl(msg_in->data.ConnectionStatisticsRes.v3.lel_SentPackets);
 			call_stats[SCCP_CALLSTATISTIC_LAST].packets_received = letohl(msg_in->data.ConnectionStatisticsRes.v3.lel_RecvdPackets);
@@ -3781,7 +3820,7 @@ void handle_ConnectionStatistics(constSessionPtr s, devicePtr device, constMessa
 			if (QualityStatsSize) {
 				sccp_copy_string(QualityStats, msg_in->data.ConnectionStatisticsRes.v3.QualityStats, QualityStatsSize);
 			}
-		} else if (letohl(msg_in->header.lel_protocolVer < 22)) {
+		} else if (letohl(msg_in->header.lel_protocolVer) < 22) {
 			call_stats[SCCP_CALLSTATISTIC_LAST].num = letohl(msg_in->data.ConnectionStatisticsRes.v20.lel_CallIdentifier);
 			call_stats[SCCP_CALLSTATISTIC_LAST].packets_sent = letohl(msg_in->data.ConnectionStatisticsRes.v20.lel_SentPackets);
 			call_stats[SCCP_CALLSTATISTIC_LAST].packets_received = letohl(msg_in->data.ConnectionStatisticsRes.v20.lel_RecvdPackets);
@@ -3823,12 +3862,12 @@ void handle_ConnectionStatistics(constSessionPtr s, devicePtr device, constMessa
 		pbx_str_append(&output_buf, buffersize, "         Last Call        : CallID: %d Packets sent: %d rcvd: %d lost: %d jitter: %d latency: %d\n", call_stats[SCCP_CALLSTATISTIC_LAST].num, call_stats[SCCP_CALLSTATISTIC_LAST].packets_sent, call_stats[SCCP_CALLSTATISTIC_LAST].packets_received, call_stats[SCCP_CALLSTATISTIC_LAST].packets_lost, call_stats[SCCP_CALLSTATISTIC_LAST].jitter, call_stats[SCCP_CALLSTATISTIC_LAST].latency);
 		sccp_log(DEBUGCAT_CORE) (VERBOSE_PREFIX_3 "QualityStats: %s\n", QualityStats);
 		if (!sccp_strlen_zero(QualityStats)) {
-			if (letohl(msg_in->header.lel_protocolVer < 20)) {
+			if (letohl(msg_in->header.lel_protocolVer) < 20) {
 				sscanf(QualityStats, "MLQK=%f;MLQKav=%f;MLQKmn=%f;MLQKmx=%f;MLQKvr=%f;CCR=%f;ICR=%f;ICRmx=%f;CS=%d;SCS=%d",
 				       &call_stats[SCCP_CALLSTATISTIC_LAST].opinion_score_listening_quality, &call_stats[SCCP_CALLSTATISTIC_LAST].avg_opinion_score_listening_quality,
 				       &call_stats[SCCP_CALLSTATISTIC_LAST].mean_opinion_score_listening_quality, &call_stats[SCCP_CALLSTATISTIC_LAST].max_opinion_score_listening_quality,
 				       &call_stats[SCCP_CALLSTATISTIC_LAST].variance_opinion_score_listening_quality, &call_stats[SCCP_CALLSTATISTIC_LAST].cumulative_concealement_ratio, &call_stats[SCCP_CALLSTATISTIC_LAST].interval_concealement_ratio, &call_stats[SCCP_CALLSTATISTIC_LAST].max_concealement_ratio, &call_stats[SCCP_CALLSTATISTIC_LAST].concealed_seconds, &call_stats[SCCP_CALLSTATISTIC_LAST].severely_concealed_seconds);
-			} else if (letohl(msg_in->header.lel_protocolVer < 22)) {
+			} else if (letohl(msg_in->header.lel_protocolVer) < 22) {
 				int Log = 0;
 
 				sscanf(QualityStats, "Log %d: mos %f, avgMos %f, maxMos %f, minMos %f, CS %d, SCS %d, CCR %f, ICR %f, maxCR %f",
@@ -4108,13 +4147,14 @@ void handle_feature_stat_req(constSessionPtr s, devicePtr d, constMessagePtr msg
 void handle_services_stat_req(constSessionPtr s, devicePtr d, constMessagePtr msg_in)
 {
 	sccp_msg_t * msg_out = NULL;
-	sccp_buttonconfig_t * config = NULL;
+	char url[StationMaxServiceURLSize] = "";
+	char label[SCCP_MAX_LABEL] = "";
 
 	int urlIndex = letohl(msg_in->data.ServiceURLStatReqMessage.lel_serviceURLIndex);
 
 	sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_3 "%s: Got ServiceURL Status Request.  Index = %d\n", d->id, urlIndex);
 
-	if ((config = sccp_dev_serviceURL_find_byindex(d, urlIndex))) {
+	if (sccp_dev_serviceURL_find_byindex(d, urlIndex, url, sizeof(url), label, sizeof(label))) {
 		/* \todo move ServiceURLStatMessage impl to sccp_protocol.c */
 		if (d->inuseprotocolversion < 7) {
 			REQ(msg_out, ServiceURLStatMessage);
@@ -4122,12 +4162,12 @@ void handle_services_stat_req(constSessionPtr s, devicePtr d, constMessagePtr ms
 				return;
 			}
 			msg_out->data.ServiceURLStatMessage.lel_serviceURLIndex = htolel(urlIndex);
-			sccp_copy_string(msg_out->data.ServiceURLStatMessage.URL, config->button.service.url, sccp_strlen(config->button.service.url) + 1);
-			//sccp_copy_string(msg_out->data.ServiceURLStatMessage.label, config->label, sccp_strlen(config->label) + 1);
-			d->copyStr2Locale(d, msg_out->data.ServiceURLStatMessage.label, config->label, sccp_strlen(config->label) + 1);
+			/* bounded by the message fields, not by the configured strings */
+			sccp_copy_string(msg_out->data.ServiceURLStatMessage.URL, url, sizeof(msg_out->data.ServiceURLStatMessage.URL));
+			d->copyStr2Locale(d, msg_out->data.ServiceURLStatMessage.label, label, sizeof(msg_out->data.ServiceURLStatMessage.label));
 		} else {
-			int URL_len = sccp_strlen(config->button.service.url);
-			int label_len = sccp_strlen(config->label);
+			int URL_len = sccp_strlen(url);
+			int label_len = sccp_strlen(label);
 			int dummy_len = URL_len + label_len;
 
 			int hdr_len = sizeof(msg_in->data.ServiceURLStatDynamicMessage) - 1;
@@ -4143,10 +4183,10 @@ void handle_services_stat_req(constSessionPtr s, devicePtr d, constMessagePtr ms
 
 				memset(&buffer[0], 0, dummy_len + 2);
 				if (URL_len) {
-					memcpy(&buffer[0], config->button.service.url, URL_len);
+					memcpy(&buffer[0], url, URL_len);
 				}
 				if (label_len) {
-					memcpy(&buffer[URL_len + 1], config->label, label_len);
+					memcpy(&buffer[URL_len + 1], label, label_len);
 				}
 				memcpy(&msg_out->data.ServiceURLStatDynamicMessage.dummy, &buffer[0], dummy_len + 2);
 			}
@@ -4305,7 +4345,8 @@ void handle_updatecapabilities_message(constSessionPtr s, devicePtr d, constMess
 
 		uint8_t video_customPictureFormats = 0;
 		video_customPictureFormats = letohl(msg_in->data.UpdateCapabilitiesMessage.v3.lel_customPictureFormatCount);
-		for (video_customPictureFormat = 0; video_customPictureFormat < video_customPictureFormats; video_customPictureFormat++) {
+		/* the count is the phone's, the array holds MAX_CUSTOM_PICTURES */
+		for (video_customPictureFormat = 0; video_customPictureFormat < video_customPictureFormats && video_customPictureFormat < MAX_CUSTOM_PICTURES; video_customPictureFormat++) {
 			int width = letohl(msg_in->data.UpdateCapabilitiesMessage.v3.customPictureFormat[video_customPictureFormat].lel_width);
 			int height = letohl(msg_in->data.UpdateCapabilitiesMessage.v3.customPictureFormat[video_customPictureFormat].lel_height);
 			int pixelAspectRatio = letohl(msg_in->data.UpdateCapabilitiesMessage.v3.customPictureFormat[video_customPictureFormat].lel_pixelAspectRatio);
@@ -4514,7 +4555,7 @@ void handle_updatecapabilities_V3_message(constSessionPtr s, devicePtr d, constM
 
 #ifdef CS_SCCP_VIDEO
 #if DEBUG
-	uint8_t video_customPictureFormats = letohl(msg_in->data.UpdateCapabilitiesV2Message.lel_customPictureFormatCount);
+	uint8_t video_customPictureFormats = letohl(msg_in->data.UpdateCapabilitiesV3Message.lel_customPictureFormatCount);
 	handle_updatecapabilities_dissect_customPictureFormat(d, video_customPictureFormats, msg_in->data.UpdateCapabilitiesV3Message.customPictureFormat);
 #endif
 
@@ -4605,6 +4646,14 @@ void handle_extension_devicecaps(constSessionPtr s, devicePtr d, constMessagePtr
 	
 	sccp_log(DEBUGCAT_ACTION + DEBUGCAT_DEVICE)(VERBOSE_PREFIX_3 "%s: extension/addon. instance:%d, type:%d, maxallowed:%d\n", d->id, instance, type, maxAllowed);
 	sccp_log(DEBUGCAT_ACTION + DEBUGCAT_DEVICE)(VERBOSE_PREFIX_3 "%s: extension/addon. text='%s'\n", d->id, text);
+	/* instance comes off the wire, and each module announced beyond the configured ones is appended to the
+	 * device: refuse instances the phone itself does not allow, and anything beyond a sane hard limit */
+#define SCCP_ADDONS_HARD_LIMIT 4
+	if (instance == 0 || instance > SCCP_ADDONS_HARD_LIMIT || (maxAllowed && instance > maxAllowed)) {
+		pbx_log(LOG_WARNING, "%s: Ignoring extension module %u: the phone allows %u, the driver at most %d\n", d->id, instance, maxAllowed, SCCP_ADDONS_HARD_LIMIT);
+		return;
+	}
+#undef SCCP_ADDONS_HARD_LIMIT
 	SCCP_LIST_LOCK(&d->addons);
 	if (SCCP_LIST_GETSIZE(&d->addons) < instance) {
 		pbx_log(LOG_NOTICE, "%s: sccp.conf device section is missing addon entry for extension module %d. Please add one.", d->id, instance);
@@ -4750,10 +4799,14 @@ void handle_device_to_user_response(constSessionPtr s, devicePtr d, constMessage
 		callReference = letohl(msg_in->data.DeviceToUserDataVersion1Message.lel_callReference);
 		transactionID = letohl(msg_in->data.DeviceToUserDataVersion1Message.lel_transactionID);
 		dataLength = letohl(msg_in->data.DeviceToUserDataVersion1Message.lel_dataLength) + 1;
-
-		if (dataLength) {
-			sccp_copy_string(data, msg_in->data.DeviceToUserDataVersion1Message.data, dataLength);
+		/* the length is the phone's: never copy more than our buffer (and the message field) holds */
+		if (dataLength == 0 || dataLength > sizeof(data)) {
+			dataLength = sizeof(data);
 		}
+		if (dataLength > sizeof(msg_in->data.DeviceToUserDataVersion1Message.data) + 1) {
+			dataLength = sizeof(msg_in->data.DeviceToUserDataVersion1Message.data) + 1;
+		}
+		sccp_copy_string(data, msg_in->data.DeviceToUserDataVersion1Message.data, dataLength);
 
 		sccp_log((DEBUGCAT_ACTION + DEBUGCAT_MESSAGE)) (VERBOSE_PREFIX_3 "%s: Device2User Response: AppID %d , LineInstance %d, CallID %d, Transaction %d\n", d->id, appID, lineInstance, callReference, transactionID);
 		sccp_log((DEBUGCAT_ACTION + DEBUGCAT_MESSAGE + DEBUGCAT_DEVICE)) (VERBOSE_PREFIX_3 "%s: Device2User Response (XML)Data:\n%s\n", d->id, data);
@@ -4824,7 +4877,7 @@ void handle_miscellaneousCommandMessage(constSessionPtr s, devicePtr d, constMes
 					sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_3 "%s: recoveryReferencePicture, pictureCount:%d\n",
 								  channel ? channel->currentDeviceId : "--",
 								  pictureCount);
-					for (curPic = 0; curPic < pictureCount; curPic++) {
+					for (curPic = 0; curPic < pictureCount && curPic < (int)ARRAY_LEN(msg_in->data.MiscellaneousCommandMessage.data.recoveryReferencePicture.pictureReference); curPic++) {
 						sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_3 "%s: recoveryReferencePicture[%d], pictureNumber %d, longTermPictureIndex %d\n",
 									channel ? channel->currentDeviceId : "--", curPic,
 									letohl(msg_in->data.MiscellaneousCommandMessage.data.recoveryReferencePicture.pictureReference[curPic].lel_pictureNumber),

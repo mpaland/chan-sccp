@@ -371,7 +371,7 @@ SCCP_API channelPtr SCCP_CALL sccp_device_getActiveChannel(constDevicePtr device
 #define sccp_device_setActiveChannel(_d,_c) __sccp_device_setActiveChannel(_d, _c, __FILE__, __LINE__, __PRETTY_FUNCTION__)
 SCCP_API void SCCP_CALL __sccp_device_setActiveChannel(constDevicePtr d, constChannelPtr channel, const char *file, uint32_t line, const char *func);
 
-SCCP_API sccp_buttonconfig_t * SCCP_CALL sccp_dev_serviceURL_find_byindex(devicePtr device, uint16_t instance);
+SCCP_API boolean_t SCCP_CALL sccp_dev_serviceURL_find_byindex(devicePtr device, uint16_t instance, char * url, size_t urlsize, char * label, size_t labelsize);
 SCCP_API void SCCP_CALL sccp_dev_check_displayprompt(constDevicePtr d);
 SCCP_API void SCCP_CALL sccp_device_setLastNumberDialed(devicePtr device, const char * lastNumberDialed, const sccp_linedevice_t * ld);
 SCCP_API void SCCP_CALL sccp_device_preregistration(devicePtr device);

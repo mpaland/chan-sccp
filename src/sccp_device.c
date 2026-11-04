@@ -523,9 +523,14 @@ const sccp_accessory_t sccp_device_getActiveAccessory(constDevicePtr d)
 int sccp_device_setAccessoryStatus(constDevicePtr d, const sccp_accessory_t accessory, const sccp_accessorystate_t state)
 {
 	pbx_assert(d != NULL && d->privateData != NULL);
-	pbx_assert(accessory > SCCP_ACCESSORY_NONE && accessory < SCCP_ACCESSORY_SENTINEL && state > SCCP_ACCESSORYSTATE_NONE && state < SCCP_ACCESSORYSTATE_SENTINEL);
 	int changed = 0;
-	
+
+	/* accessory and state come straight off the wire and index accessoryStatus[]: a real check, pbx_assert is compiled out */
+	if (accessory <= SCCP_ACCESSORY_NONE || accessory >= SCCP_ACCESSORY_SENTINEL || state <= SCCP_ACCESSORYSTATE_NONE || state >= SCCP_ACCESSORYSTATE_SENTINEL) {
+		pbx_log(LOG_WARNING, "%s: Ignoring accessory status out of range (accessory:%d, state:%d)\n", DEV_ID_LOG(d), (int)accessory, (int)state);
+		return changed;
+	}
+
 	sccp_private_lock(d->privateData);
 	if (state != d->privateData->accessoryStatus[accessory]) {
 		d->privateData->accessoryStatus[accessory] = state;
@@ -600,7 +605,8 @@ int sccp_device_setRegistrationState(constDevicePtr d, const skinny_registration
 		sccp_private_unlock(d->privateData);
 	}
 	
-	if (iPbx.endpoint_online && iPbx.endpoint_offline) {
+	/* d->endpoint stays NULL when iPbx.endpoint_create() got an empty device name; ast_endpoint_set_state() would dereference it */
+	if (d->endpoint && iPbx.endpoint_online && iPbx.endpoint_offline) {
 		if (SKINNY_DEVICE_RS_OK == state) {
 			struct sockaddr_storage ourip = { 0 };
 			sccp_session_getOurIP(d->session, &ourip, 0);
@@ -912,34 +918,38 @@ static uint8_t sccp_addon_build_buttontemplate(constDevicePtr d, sccp_addon_t *a
 
 	sccp_log((DEBUGCAT_CONFIG + DEBUGCAT_BUTTONTEMPLATE + DEBUGCAT_DEVICE)) (VERBOSE_PREFIX_3 "%s: Building button template %s(%d)\n", d->id, skinny_devicetype2str(type), type);
 
+	uint8_t count = 0;
 	switch (type) {
 		case SKINNY_DEVICETYPE_CISCO_ADDON_7914:
-			for (i = 0; i < 14; i++) {
-				btn[btn_index++].type = SCCP_BUTTONTYPE_MULTI;
-			}
+			count = 14;
 			break;
 		case SKINNY_DEVICETYPE_CISCO_ADDON_7915_12BUTTON:
 		case SKINNY_DEVICETYPE_CISCO_ADDON_7916_12BUTTON:
-			for (i = 0; i < 12; i++) {
-				btn[btn_index++].type = SCCP_BUTTONTYPE_MULTI;
-			}
+			count = 12;
 			break;
 		case SKINNY_DEVICETYPE_CISCO_ADDON_7915_24BUTTON:
 		case SKINNY_DEVICETYPE_CISCO_ADDON_7916_24BUTTON:
-			for (i = 0; i < 24; i++) {
-				btn[btn_index++].type = SCCP_BUTTONTYPE_MULTI;
-			}
+			count = 24;
 			break;
 		case SKINNY_DEVICETYPE_CISCO_ADDON_SPA500S:
 		case SKINNY_DEVICETYPE_CISCO_ADDON_SPA500DS:
 		case SKINNY_DEVICETYPE_CISCO_ADDON_SPA932DS:
-			for (i = 0; i < 32; i++) {
-				btn[btn_index++].type = SCCP_BUTTONTYPE_MULTI;
-			}
+			count = 32;
 			break;
 		default:
 			pbx_log(LOG_WARNING, "%s: Unknown addon device type '%d' found.\n", d->id, type);
 			break;
+	}
+	/* The template holds StationMaxButtonTemplateSize entries, and the addon list is not only what sccp.conf
+	 * lists: the phone announces its own modules (handle_extension_devicecaps). Never write past the template. */
+	if (btn_index >= StationMaxButtonTemplateSize) {
+		count = 0;
+	} else if (count > StationMaxButtonTemplateSize - btn_index) {
+		pbx_log(LOG_WARNING, "%s: addon %s needs %d buttons but only %d template slots are left, the rest is not offered\n", d->id, skinny_devicetype2str(type), count, StationMaxButtonTemplateSize - btn_index);
+		count = StationMaxButtonTemplateSize - btn_index;
+	}
+	for (i = 0; i < count; i++) {
+		btn[btn_index++].type = SCCP_BUTTONTYPE_MULTI;
 	}
 	for (i = start_point; i < btn_index; i++) {
 		btn[i].devicetype = type;
@@ -2715,16 +2725,25 @@ boolean_t sccp_device_isVideoSupported(constDevicePtr device)
  * \brief Find ServiceURL by index
  * \param device SCCP Device
  * \param instance Instance as uint8_t
- * \return SCCP Service
+ * \param url buffer receiving the service url
+ * \param urlsize size of url
+ * \param label buffer receiving the service label
+ * \param labelsize size of label
+ * \return TRUE when found
  *
+ * \note url and label are copied while the button list is locked: a pointer into the list would not survive
+ *       a concurrent reload, which frees exactly these strings.
  */
-sccp_buttonconfig_t *sccp_dev_serviceURL_find_byindex(devicePtr device, uint16_t instance)
+boolean_t sccp_dev_serviceURL_find_byindex(devicePtr device, uint16_t instance, char * url, size_t urlsize, char * label, size_t labelsize)
 {
 	sccp_buttonconfig_t *config = NULL;
+	boolean_t found = FALSE;
 
-	if (!device || !device->session) {
-		return NULL;
+	if (!device || !device->session || !url || !urlsize || !label || !labelsize) {
+		return FALSE;
 	}
+	url[0] = '\0';
+	label[0] = '\0';
 	sccp_log((DEBUGCAT_DEVICE + DEBUGCAT_BUTTONTEMPLATE)) (VERBOSE_PREFIX_3 "%s: searching for service with instance %d\n", device->id, instance);
 	SCCP_LIST_LOCK(&device->buttonconfig);
 	SCCP_LIST_TRAVERSE(&device->buttonconfig, config, list) {
@@ -2732,12 +2751,15 @@ sccp_buttonconfig_t *sccp_dev_serviceURL_find_byindex(devicePtr device, uint16_t
 
 		if (config->type == SERVICE && config->instance == instance) {
 			sccp_log((DEBUGCAT_DEVICE + DEBUGCAT_BUTTONTEMPLATE)) (VERBOSE_PREFIX_3 "%s: found service: %s\n", device->id, config->label);
+			sccp_copy_string(url, config->button.service.url ? config->button.service.url : "", urlsize);
+			sccp_copy_string(label, config->label ? config->label : "", labelsize);
+			found = TRUE;
 			break;
 		}
 	}
 	SCCP_LIST_UNLOCK(&device->buttonconfig);
 
-	return config;
+	return found;
 }
 
 /*!
