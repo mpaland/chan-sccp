@@ -112,6 +112,7 @@ typedef struct _PbxInterface {
 
 	/* feature section */
 	sccp_parkresult_t(*const feature_park) (constChannelPtr hostChannel);
+	boolean_t(*const feature_parkingAvailable) (void);							/*!< optional: can a call be parked at all right now */
 	boolean_t(*const feature_stopMusicOnHold) (constChannelPtr channel);
 	boolean_t(*const feature_addToDatabase) (const char *family, const char *key, const char *value);
 	boolean_t(*const feature_getFromDatabase) (const char *family, const char *key, char *out, int outlen);

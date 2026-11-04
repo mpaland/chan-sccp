@@ -1513,6 +1513,14 @@ void sccp_dev_set_keyset(constDevicePtr d, uint8_t lineInstance, uint32_t callid
 	if (softKeySetIndex != KEYMODE_CONNTRANS && softKeySetIndex != KEYMODE_CONNECTED && softKeySetIndex != KEYMODE_EMPTY) {
 		sccp_softkey_setSoftkeyState((sccp_device_t *) d, softKeySetIndex, SKINNY_LBL_MONITOR, FALSE);
 	}
+#ifdef CS_SCCP_PARK
+	/* grey the park key while Asterisk has nothing to park into (res_parking not loaded, or loaded without a
+	 * configuration): every park attempt fails then, and the phone only found out by trying with a live call.
+	 * Re-evaluated whenever a keyset is set, so it follows res_parking being loaded or unloaded. */
+	if (d->park && iPbx.feature_parkingAvailable) {
+		sccp_softkey_setSoftkeyState((sccp_device_t *) d, softKeySetIndex, SKINNY_LBL_PARK, iPbx.feature_parkingAvailable());
+	}
+#endif
 	if (softKeySetIndex == KEYMODE_RINGOUT) {
 		if (d->transfer && d->transferChannels.transferer) {
 			sccp_softkey_setSoftkeyState((sccp_device_t *) d, softKeySetIndex, SKINNY_LBL_TRANSFER, TRUE);

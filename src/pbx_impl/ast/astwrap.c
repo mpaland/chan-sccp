@@ -1554,6 +1554,14 @@ static void * parking_subscriptionCleanup (void * data)
  * \todo copy connected line info
  *
  */
+/*!
+ * \brief Can a call be parked right now? (res_parking is loaded and running)
+ */
+static boolean_t sccp_astwrap_parkingAvailable(void)
+{
+	return ast_parking_provider_registered() ? TRUE : FALSE;
+}
+
 static sccp_parkresult_t sccp_astwrap_park(constChannelPtr hostChannel)
 {
 	sccp_parkresult_t res = PARK_RESULT_FAIL;
@@ -3529,6 +3537,7 @@ const PbxInterface iPbx = {
 	.feature_monitor = sccp_astgenwrap_featureMonitor,
 
 	.feature_park = sccp_astwrap_park,
+	.feature_parkingAvailable = sccp_astwrap_parkingAvailable,
 	.getFeatureExtension = sccp_astwrap_getFeatureExtension,
 	.getPickupExtension = sccp_astwrap_getPickupExtension,
 
