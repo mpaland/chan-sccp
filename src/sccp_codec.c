@@ -149,23 +149,25 @@ char * sccp_codec_multiple2str(char * buf, size_t size, const skinny_codec_t * c
 		return buf;
 	}
 	memset(buf, 0, size);
-	char * endptr = buf;
-	int    comma  = 0;
+	size_t used  = 0;
+	int    comma = 0;
 
-	snprintf(endptr++, size, "[");
-	endptr += strlen(endptr);
-	for (uint x = 0; x < clength; x++) {
+	/* every write is bounded by what is left: each got the whole size at an offset into buf */
+	used += snprintf(buf, size, "[");
+	for (uint x = 0; x < clength && used < size - 1; x++) {
 		if (codecs[x] == SKINNY_CODEC_NONE || codecs[x] == SKINNY_CODEC_NONSTANDARD) {
 			break;
 		}
-		// snprintf(endptr, size, "%s%s (%d)", comma++ ? ", " : "",codec2name(codecs[x]), codecs[x]);
-		snprintf(endptr, size, "%s%s", comma++ ? ", " : "", codec2name(codecs[x]));
-		endptr += strlen(endptr);
+		snprintf(buf + used, size - used, "%s%s", comma++ ? ", " : "", codec2name(codecs[x]));
+		used = strlen(buf);
 	}
-	if (buf == endptr) {
-		snprintf(endptr++, size, "nothing)");
+	if (!comma && used < size - 1) {
+		snprintf(buf + used, size - used, "nothing");
+		used = strlen(buf);
 	}
-	snprintf(endptr, size, "]");
+	if (used < size - 1) {
+		snprintf(buf + used, size - used, "]");
+	}
 	return buf;
 }
 
@@ -175,13 +177,16 @@ static void codec_pref_remove(skinny_codec_t * skinny_codec_prefs, skinny_codec_
 	boolean_t found = FALSE;
 
 	for (x = 0; x < SKINNY_MAX_CAPABILITIES && skinny_codec_prefs[x] != SKINNY_CODEC_NONE; x++) {
-		if (!found && skinny_codec_prefs[x] == skinny_codec) {
+		if (skinny_codec_prefs[x] == skinny_codec) {
+			/* one move closes the gap; moving again on every later iteration (while x advanced past the element
+			 * just moved into place) dropped every second codec after it: disallow=B on [A,B,C,D,E] left [A,C,E] */
 			found = TRUE;
-		}
-		if (found) {
 			memmove(skinny_codec_prefs + x, skinny_codec_prefs + (x + 1), (SKINNY_MAX_CAPABILITIES - (x + 1)) * sizeof(skinny_codec_t));                                        // move left
+			skinny_codec_prefs[SKINNY_MAX_CAPABILITIES - 1] = SKINNY_CODEC_NONE;
+			break;
 		}
 	}
+	(void)found;
 }
 
 /*!

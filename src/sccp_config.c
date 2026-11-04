@@ -701,6 +701,12 @@ static sccp_configurationchange_t sccp_config_object_setValue(void * const obj, 
 			switch (sccpConfigOption->size) {
 				case 1:
 					if ((!strncmp("0x", tmp_value, 2) && sscanf(tmp_value, "%hx", &uint8num)) || (sscanf(tmp_value, "%hu", &uint8num) == 1)) {
+						/* scanned wider than the destination: out of range values wrapped silently */
+						if (uint8num > UINT8_MAX) {
+							pbx_log(LOG_NOTICE, "SCCP: Invalid value '%s' for [%s]->%s. Allowed: [0-255]\n", value, sccpConfigSegment->name, name);
+							changed = SCCP_CONFIG_CHANGE_INVALIDVALUE;
+							break;
+						}
 						if ((*(uint8_t *)dst) != uint8num) {
 							*(uint8_t *)dst = uint8num;
 							changed         = SCCP_CONFIG_CHANGE_CHANGED;
@@ -708,7 +714,14 @@ static sccp_configurationchange_t sccp_config_object_setValue(void * const obj, 
 					}
 					break;
 				case 2:
-					if ((!strncmp("0x", tmp_value, 2) && sscanf(tmp_value, "%ux", &uint16num)) || (sscanf(tmp_value, "%u", &uint16num) == 1)) {
+					/* %x: "%ux" read the "0" of "0x.." as decimal, so every hex value became 0 */
+					if ((!strncmp("0x", tmp_value, 2) && sscanf(tmp_value, "%x", &uint16num)) || (sscanf(tmp_value, "%u", &uint16num) == 1)) {
+						/* scanned wider than the destination: port = 99999 became 34463 */
+						if (uint16num > UINT16_MAX) {
+							pbx_log(LOG_NOTICE, "SCCP: Invalid value '%s' for [%s]->%s. Allowed: [0-65535]\n", value, sccpConfigSegment->name, name);
+							changed = SCCP_CONFIG_CHANGE_INVALIDVALUE;
+							break;
+						}
 						if ((*(uint16_t *)dst) != uint16num) {
 							*(uint16_t *)dst = uint16num;
 							changed          = SCCP_CONFIG_CHANGE_CHANGED;
@@ -1047,6 +1060,11 @@ sccp_value_changed_t sccp_config_parse_ipaddress(void * const dest, const size_t
 		pbx_log(LOG_WARNING, "Invalid IP address: %s\n", value);
 		changed = SCCP_CONFIG_CHANGE_INVALIDVALUE;
 	} else {
+		/* port= writes into the same sockaddr: carry an already set port across, or a [general] with port= above
+		 * bindaddr= listened on the default port */
+		if (sccp_netsock_getPort(&bindaddr_new) == 0 && sccp_netsock_getPort(&bindaddr_prev) != 0) {
+			sccp_netsock_setPort(&bindaddr_new, sccp_netsock_getPort(&bindaddr_prev));
+		}
 		if (sccp_netsock_cmp_addr(&bindaddr_prev, &bindaddr_new)) {                                        // 0 = equal
 			memcpy(&(*(struct sockaddr_storage *)dest), &bindaddr_new, sizeof(bindaddr_new));
 			changed = SCCP_CONFIG_CHANGE_CHANGED;
@@ -1118,14 +1136,17 @@ sccp_value_changed_t sccp_config_parse_privacyFeature(void * const dest, const s
 	char *                      value          = pbx_strdupa(v->value);
 	sccp_featureConfiguration_t privacyFeature = { 0 };
 
-	if (sccp_strcaseequals(value, "full")) {
+	if (sccp_strlen_zero(value)) {											/* the config engine clearing the option: off */
+		privacyFeature.status  = 0;
+		privacyFeature.enabled = FALSE;
+	} else if (sccp_strcaseequals(value, "full")) {
 		privacyFeature.status  = ~0;
 		privacyFeature.enabled = TRUE;
-	} else if (sccp_true(value) || !sccp_true(value)) {
+	} else if (sccp_true(value) || sccp_false(value)) {								/* "true || !true" accepted anything */
 		privacyFeature.status  = 0;
 		privacyFeature.enabled = sccp_true(value);
 	} else {
-		pbx_log(LOG_WARNING, "Invalid privacy value, should be 'full', 'on' or 'off'\n");
+		pbx_log(LOG_WARNING, "Invalid privacy value '%s', should be 'full', 'on' or 'off'\n", value);
 		return SCCP_CONFIG_CHANGE_INVALIDVALUE;
 	}
 
@@ -3632,8 +3653,7 @@ static int _config_generate_wiki(char * filename)
 		sccpConfigSegment = sccp_find_segment((sccp_config_segment_t)segment);
 		if (!sccpConfigSegment) {
 			pbx_log(LOG_ERROR, "Could not find segment:%d\n", (int)segment);
-			fclose(f);
-			close(fd);
+			fclose(f);						/* closes fd as well */
 			return -3;
 		}
 
@@ -3695,15 +3715,14 @@ static int _config_generate_wiki(char * filename)
 					if (!sccp_strlen_zero(config[sccp_option].description)) {
 						fprintf(f, "<tr class='descr_row'><td></td>\n");
 						fprintf(f, "<td class='description' id='%s' colspan='4'><small>", config[sccp_option].name);
-						description = pbx_strdup(config[sccp_option].description);
+						char * description_orig = pbx_strdup(config[sccp_option].description);	/* strsep walks description: free the start */
+						description = description_orig;
 						while ((description_part = strsep(&description, "\n"))) {
 							if (!sccp_strlen_zero(description_part)) {
 								fprintf(f, "%s.<br>", description_part);
 							}
 						}
-						if (description_part) {
-							sccp_free(description_part);
-						}
+						sccp_free(description_orig);				/* was leaked: description_part and description are NULL here */
 						fprintf(f, "</small></td>\n");
 						sccp_free(description);
 					}
@@ -3713,15 +3732,13 @@ static int _config_generate_wiki(char * filename)
 				sccp_free(option_value_tokens);
 			} else {
 				pbx_log(LOG_ERROR, "Error creating new variable structure for %s='%s'\n", config[sccp_option].name, config[sccp_option].defaultValue);
-				fclose(f);
-				close(fd);
+				fclose(f);						/* closes fd as well */
 				return 2;
 			}
 		}
 		fprintf(f, "</table><br>\n");
 	}
-	fclose(f);
-	close(fd);
+	fclose(f);						/* closes fd as well */
 	pbx_log(LOG_NOTICE, "Created new wiki file '%s'\n", fn);
 
 	return 0;
@@ -3792,8 +3809,7 @@ int sccp_config_generate(char * filename, int configType)
 		sccpConfigSegment = sccp_find_segment((sccp_config_segment_t)segment);
 		if (!sccpConfigSegment) {
 			pbx_log(LOG_ERROR, "Could not find segment:%d\n", (int)segment);
-			fclose(f);
-			close(fd);
+			fclose(f);						/* closes fd as well */
 			return -3;
 		}
 		if (configType == 0 && (segment == SCCP_CONFIG_DEVICE_SEGMENT || segment == SCCP_CONFIG_LINE_SEGMENT)) {
@@ -3878,7 +3894,8 @@ int sccp_config_generate(char * filename, int configType)
 							((config[sccp_option].flags & SCCP_CONFIG_FLAG_DEPRECATED) == SCCP_CONFIG_FLAG_DEPRECATED) ? "(DEPRECATED) " : "",
 							((config[sccp_option].flags & SCCP_CONFIG_FLAG_OBSOLETE) == SCCP_CONFIG_FLAG_OBSOLETE) ? "(DEPRECATED) " : "", size_str);
 						if (!sccp_strlen_zero(config[sccp_option].description)) {
-							description = pbx_strdup(config[sccp_option].description);
+							char * description_orig = pbx_strdup(config[sccp_option].description);	/* strsep walks description: free the start */
+							description = description_orig;
 							while ((description_part = strsep(&description, "\n"))) {
 								if (!sccp_strlen_zero(description_part)) {
 									if (linelen) {
@@ -3889,9 +3906,7 @@ int sccp_config_generate(char * filename, int configType)
 									linelen = 0;
 								}
 							}
-							if (description_part) {
-								sccp_free(description_part);
-							}
+							sccp_free(description_orig);				/* was leaked: description_part and description are NULL here */
 							sccp_free(description);
 						} else {
 							fprintf(f, "\n");
@@ -3903,16 +3918,14 @@ int sccp_config_generate(char * filename, int configType)
 					}
 				} else {
 					pbx_log(LOG_ERROR, "Error creating new variable structure for %s='%s'\n", config[sccp_option].name, config[sccp_option].defaultValue);
-					fclose(f);
-					close(fd);
+					fclose(f);						/* closes fd as well */
 					return 2;
 				}
 			}
 		}
 		sccp_log((DEBUGCAT_CONFIG))("\n");
 	}
-	fclose(f);
-	close(fd);
+	fclose(f);						/* closes fd as well */
 	pbx_log(LOG_NOTICE, "Created new config file '%s'\n", fn);
 
 	return 0;
