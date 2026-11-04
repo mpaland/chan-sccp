@@ -57,7 +57,8 @@ noinst_HEADERS		= chan_sccp.h			sccp_actions.h			sccp_cli.h			sccp_devstate.h			
 			  revision.h			sccp_channel.h			sccp_device.h			sccp_event.h			\
 			  sccp_labels.h			sccp_protocol.h			sccp_enum.h			sccp_codec.h			\
 			  define.h			sccp_netsock.h			sccp_xml.h			sccp_webservice.h		\
-			  sccp_utils.h			sccp_featureParkingLot.h	sccp_transport.h		pbx_impl/pbx_impl.h
+			  sccp_utils.h			sccp_featureParkingLot.h	sccp_transport.h		pbx_impl/pbx_impl.h		\
+			  forward_declarations.h	sccp_globals.h			sccp_xml_embedded.h
 
 libsccp_la_SOURCES	= sccp_callinfo.c 		sccp_channel.c			sccp_device.c			sccp_debug.c			\
 			  sccp_indicate.c 		sccp_pbx.c 			sccp_session.c			sccp_threadpool.c		\
@@ -103,6 +104,13 @@ install-csmodLTLIBRARIES:
 		echo    "Please restart asterisk or reload the module to use the new version of chan_sccp.so"; 				\
 		echo    "==============================================================================================="; 		\
 	fi
+
+# the custom install hook above never had an uninstall counterpart: make uninstall left the module behind
+uninstall-csmodLTLIBRARIES:
+	@$(NORMAL_UNINSTALL)
+	@echo "Removing $(DESTDIR)$(csmoddir)/chan_sccp.so..."
+	@rm -f "$(DESTDIR)$(csmoddir)/chan_sccp.so"
+	@if test -n "$(PBX_DEBUGMODDIR)"; then rm -f "$(DESTDIR)$(PBX_DEBUGMODDIR)/chan_sccp.so"; fi
 
 install-data-local:
 	@test -d $(DESTDIR)$(PBX_ETC) || $(mkinstalldirs) $(DESTDIR)$(PBX_ETC);								\

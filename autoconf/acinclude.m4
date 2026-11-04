@@ -501,6 +501,9 @@ AC_DEFUN([CS_GET_VERSION], [
   cd $BASE >/dev/null
   . ./tools/versioncheck silent
   cd $CURRENT >/dev/null
+  dnl the branch ends up in the version and in the distribution directory/tarball names: a branch like "fix/foo"
+  dnl or a detached HEAD ("(HEAD detached at ...)") made `make dist` fail, keep only characters safe in file names
+  SCCP_BRANCH="`echo "${SCCP_BRANCH}" | sed -e 's/[[^A-Za-z0-9._+-]]/_/g'`"
 
   AC_DEFINE_UNQUOTED([SCCP_VERSION],  "${SCCP_VERSION}", [Define the SCCP Version])
   AC_DEFINE_UNQUOTED([SCCP_BRANCH],   "${SCCP_BRANCH}", [Define the SCCP Branch])
