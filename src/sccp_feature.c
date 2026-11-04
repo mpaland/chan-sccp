@@ -326,7 +326,10 @@ int sccp_feat_directed_pickup(constDevicePtr d, channelPtr c, uint32_t lineInsta
 	}
 	/* end assertions */
 
-	if ((context = strchr(exten, '@'))) {
+	/* split a local copy: exten is the caller's const string, which strchr() and the write below modified */
+	char * localexten = pbx_strdupa(exten);
+	exten = localexten;
+	if ((context = strchr(localexten, '@'))) {
 		*context++ = '\0';
 	} else {
 		if (!sccp_strlen_zero(c->line->directed_pickup_context)) {
