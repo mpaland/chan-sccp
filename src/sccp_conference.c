@@ -918,6 +918,7 @@ int playback_to_conference(conferencePtr conference, const char *filename, int s
 
 	if (filename && !sccp_strlen_zero(filename) && !pbx_fileexists(filename, NULL, NULL)) {
 		pbx_log(LOG_WARNING, "File %s does not exists in any format\n", !sccp_strlen_zero(filename) ? filename : "<unknown>");
+		pbx_mutex_unlock(&conference->playback.lock);						/* was left locked: every later announcement blocked */
 		return 1;
 	}
 
@@ -1228,7 +1229,7 @@ void sccp_conference_show_list(constConferencePtr conference, constChannelPtr ch
 		sccp_log((DEBUGCAT_CONFERENCE + DEBUGCAT_HIGH)) (VERBOSE_PREFIX_4 "SCCPCONF/%04d: ShowList appID %d, lineInstance %d, callReference %d, transactionID %d\n", conference->id, appID, participant->callReference, participant->lineInstance, participant->transactionID);
 		sccp_log((DEBUGCAT_CONFERENCE + DEBUGCAT_HIGH)) (VERBOSE_PREFIX_4 "SCCPCONF/%04d: XML-message:\n%s\n", conference->id, pbx_str_buffer(xmlStr));
 
-		participant->device->protocol->sendUserToDeviceDataVersionMessage(participant->device, appID, participant->callReference, participant->lineInstance, participant->transactionID, pbx_str_buffer(xmlStr), 2);
+		participant->device->protocol->sendUserToDeviceDataVersionMessage(participant->device, appID, participant->lineInstance, participant->callReference, participant->transactionID, pbx_str_buffer(xmlStr), 2);
 	}
 }
 
@@ -1247,7 +1248,7 @@ void __sccp_conference_hide_list(participantPtr participant)
 				snprintf(xmlData, sizeof(xmlData), "<CiscoIPPhoneExecute><ExecuteItem Priority=\"0\" URL=\"Init:Services\"/></CiscoIPPhoneExecute>");
 			}
 
-			participant->device->protocol->sendUserToDeviceDataVersionMessage(participant->device, appID, participant->callReference, participant->lineInstance, participant->transactionID, xmlData, 2);
+			participant->device->protocol->sendUserToDeviceDataVersionMessage(participant->device, appID, participant->lineInstance, participant->callReference, participant->transactionID, xmlData, 2);
 			participant->device->conferencelist_active = FALSE;
 		}
 	}
@@ -1294,7 +1295,8 @@ static void sccp_conference_update_conflist(conferencePtr conference)
  */
 void sccp_conference_handle_device_to_user(devicePtr d, uint32_t callReference, uint32_t transactionID, uint32_t conferenceID, uint32_t participantID)
 {
-	if (d && d->dtu_softkey.transactionID == transactionID) {
+	/* transactionID 0 matches the reset state, in which there is no action */
+	if (d && d->dtu_softkey.action && d->dtu_softkey.transactionID == transactionID) {
 		sccp_log((DEBUGCAT_CONFERENCE)) (VERBOSE_PREFIX_4 "%s: Handle DTU SoftKey Button Press for CallID %d, Transaction %d, Conference %d, Participant:%d, Action %s\n", d->id, callReference, transactionID, conferenceID, participantID, d->dtu_softkey.action);
 
 		AUTO_RELEASE(sccp_conference_t, conference , sccp_conference_findByID(conferenceID));
@@ -1313,6 +1315,11 @@ void sccp_conference_handle_device_to_user(devicePtr d, uint32_t callReference, 
 
 		if (!moderator) {
 			pbx_log(LOG_WARNING, "SCCPCONF/%04d: %s: Moderator not found\n", conference->id, DEV_ID_LOG(d));
+			goto EXIT;
+		}
+		/* the phone's own participant: only a moderator may end the conference, mute, kick or (de)promote */
+		if (!moderator->isModerator && strcmp(d->dtu_softkey.action, "EXIT") != 0) {
+			pbx_log(LOG_WARNING, "SCCPCONF/%04d: %s: moderator action '%s' denied for a non-moderator participant\n", conference->id, DEV_ID_LOG(d), d->dtu_softkey.action);
 			goto EXIT;
 		}
 		sccp_log((DEBUGCAT_CONFERENCE)) (VERBOSE_PREFIX_3 "SCCPCONF/%04d: DTU Softkey Executing Action %s (%s)\n", conference->id, d->dtu_softkey.action, DEV_ID_LOG(d));
@@ -1489,7 +1496,7 @@ void sccp_conference_promote_demote_participant(conferencePtr conference, partic
 			if (conference->num_moderators > 1) {							// demote
 				participant->isModerator = FALSE;
 				//ast_clear_flag(&(participant->features.feature_flags), AST_BRIDGE_CHANNEL_FLAG_DISSOLVE_HANGUP);
-				conference->num_moderators++;
+				conference->num_moderators--;							/* demoting one is one fewer */
 				sccp_conference_release(&participant->device->conference);			// explicit release
 				sccp_softkey_setSoftkeyState(participant->device, KEYMODE_CONNCONF, SKINNY_LBL_JOIN, FALSE);
 				sccp_softkey_setSoftkeyState(participant->device, KEYMODE_CONNTRANS, SKINNY_LBL_JOIN, FALSE);
@@ -1582,7 +1589,7 @@ void sccp_conference_invite_participant(constConferencePtr conference, constPart
 		sccp_log((DEBUGCAT_CONFERENCE + DEBUGCAT_HIGH)) (VERBOSE_PREFIX_4 "SCCPCONF/%04d: ShowList appID %d, lineInstance %d, callReference %d, transactionID %d\n", conference->id, appID, moderator->callReference, moderator->lineInstance, moderator->transactionID);
 		sccp_log((DEBUGCAT_CONFERENCE + DEBUGCAT_HIGH)) (VERBOSE_PREFIX_4 "SCCPCONF/%04d: XML-message:\n%s\n", conference->id, pbx_str_buffer(xmlStr));
 
-		moderator->device->protocol->sendUserToDeviceDataVersionMessage(moderator->device, APPID_CONFERENCE_INVITE, moderator->callReference, moderator->lineInstance, moderator->transactionID, pbx_str_buffer(xmlStr), 2);
+		moderator->device->protocol->sendUserToDeviceDataVersionMessage(moderator->device, APPID_CONFERENCE_INVITE, moderator->lineInstance, moderator->callReference, moderator->transactionID, pbx_str_buffer(xmlStr), 2);
 	}
 }
 
@@ -1790,11 +1797,10 @@ int sccp_cli_conference_command(int fd, sccp_cli_totals_t *totals, struct manses
 	int res = RESULT_SUCCESS;
 	char error[100];
 
-	sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_2 "Conference Command:%s, Conference %s, Participant %s\n", argv[2], argv[3], argc >= 5 ? argv[4] : "");
-
 	if (argc < 4 || argc > 5) {
 		return RESULT_SHOWUSAGE;
 	}
+	sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_2 "Conference Command:%s, Conference %s, Participant %s\n", argv[2], argv[3], argc >= 5 ? argv[4] : "");	/* after the argc check */
 
 	if (sccp_strlen_zero(argv[2]) || sccp_strlen_zero(argv[3])) {
 		return RESULT_SHOWUSAGE;
