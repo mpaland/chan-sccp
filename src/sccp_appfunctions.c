@@ -485,7 +485,8 @@ static int sccp_func_sccpdevice(PBX_CHANNEL_TYPE * chan, NEWCONST char * cmd, ch
 				sccp_copy_string(buf, "not supported", buf_len);
 #endif
 			} else if (!strcasecmp(token, "active_channel")) {
-				snprintf(buf, buf_len, "%d", d->active_channel ? d->active_channel->callid : 0);
+				AUTO_RELEASE(sccp_channel_t, active_channel, sccp_device_getActiveChannel(d));		/* retained, not a raw read */
+				snprintf(buf, buf_len, "%d", active_channel ? active_channel->callid : 0);
 			} else if (!strcasecmp(token, "transfer_channel")) {
 				snprintf(buf, buf_len, "%d", d->transferChannels.transferee ? d->transferChannels.transferee->callid : 0);
 #ifdef CS_SCCP_CONFERENCE

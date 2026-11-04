@@ -319,6 +319,9 @@ enum ast_device_state sccp_devstate_getNextDeviceState(constDevicePtr d, sccp_bu
 	SCCP_LIST_LOCK(&deviceStates);
 	deviceState_t * deviceState = getDeviceStateHandler(config->button.feature.options);
 	SCCP_LIST_UNLOCK(&deviceStates);
+	if (!deviceState) {											/* the handler is only created once the device has registered */
+		return nextstate;
+	}
 
 	SubscribingDevice_t * subscriber = NULL;
 

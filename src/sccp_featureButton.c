@@ -62,6 +62,8 @@ void sccp_featButton_changed(constDevicePtr device, sccp_feature_type_t featureT
 	SCCP_LIST_LOCK(&(((devicePtr)device)->buttonconfig));
 	SCCP_LIST_TRAVERSE(&device->buttonconfig, config, list) {
 		if (config->type == FEATURE && config->button.feature.id == featureType) {
+			buttonID = SKINNY_BUTTONTYPE_FEATURE;								/* per button: the previous button's values leaked into this one */
+			lineFound = FALSE;
 			sccp_log((DEBUGCAT_FEATURE_BUTTON + DEBUGCAT_FEATURE)) (VERBOSE_PREFIX_3 "%s: (sccp_featButton_changed) FeatureID = %d, Option: %s\n", DEV_ID_LOG(device), config->button.feature.id, (config->button.feature.options) ? config->button.feature.options : "(none)");
 			sccp_copy_string(label_text, config->label, sizeof(label_text));
 			instance = config->instance;
@@ -212,8 +214,15 @@ void sccp_featButton_changed(constDevicePtr device, sccp_feature_type_t featureT
 					break;
 #ifdef CS_DEVSTATE_FEATURE
 					case SCCP_FEATURE_DEVSTATE:
-						/* handled by sccp_devstate.c */
-						goto EXIT_FUNC;
+						/* answer the status request: the device state module only notifies once the device is
+						 * registered, and the phone gets there only after this request was answered (upstream
+						 * #564). Same button type rule as the button template. */
+						if (device->inuseprotocolversion >= 15 && device->skinny_type != SKINNY_DEVICETYPE_CISCO8941 && device->skinny_type != SKINNY_DEVICETYPE_CISCO8945) {
+							buttonID = SKINNY_BUTTONTYPE_MULTIBLINKFEATURE;
+						} else {
+							buttonID = SKINNY_BUTTONTYPE_FEATURE;
+						}
+						break;
 #endif
 					case SCCP_FEATURE_HOLD:
 						buttonID = SKINNY_BUTTONTYPE_HOLD;
@@ -319,7 +328,7 @@ void sccp_featButton_changed(constDevicePtr device, sccp_feature_type_t featureT
 			if (device->inuseprotocolversion >= 15) {
 				REQ(msg, FeatureStatDynamicMessage);
 				if (!msg) {
-					return;
+					break;									/* not return: buttonconfig is unlocked after the loop */
 				}
 				msg->data.FeatureStatDynamicMessage.lel_lineInstance = htolel(instance);
 				msg->data.FeatureStatDynamicMessage.lel_buttonType = htolel(buttonID);
@@ -328,7 +337,7 @@ void sccp_featButton_changed(constDevicePtr device, sccp_feature_type_t featureT
 			} else {
 				REQ(msg, FeatureStatMessage);
 				if (!msg) {
-					return;
+					break;
 				}
 				msg->data.FeatureStatMessage.lel_lineInstance = htolel(instance);
 				msg->data.FeatureStatMessage.lel_buttonType = htolel(buttonID);
@@ -339,7 +348,6 @@ void sccp_featButton_changed(constDevicePtr device, sccp_feature_type_t featureT
 			sccp_log((DEBUGCAT_FEATURE_BUTTON + DEBUGCAT_FEATURE)) (VERBOSE_PREFIX_3 "%s: (sccp_featButton_changed) Got Feature Status Request. Instance = %d, Label: '%s', Status: %d\n", DEV_ID_LOG(device), instance, config->label, config->button.feature.status);
 		}
 	}
-EXIT_FUNC:
 	SCCP_LIST_UNLOCK(&(((devicePtr)device)->buttonconfig));
 }
 // kate: indent-width 8; replace-tabs off; indent-mode cstyle; auto-insert-doxygen on; line-numbers on; tab-indents on; keep-extra-spaces off; auto-brackets off;

@@ -1967,10 +1967,13 @@ void sccp_dev_speed_find_byindex(constDevicePtr d, const uint16_t instance, bool
 {
 	sccp_buttonconfig_t *config  = NULL;
 
+	if (!k) {
+		return;
+	}
+	memset(k, 0, sizeof(sccp_speed_t));								/* before the early return: every caller reads k->valid */
 	if (!d || !d->session || instance == 0) {
 		return;
 	}
-	memset(k, 0, sizeof(sccp_speed_t));
 	sccp_copy_string(k->name, "unknown speeddial", sizeof(k->name));
 
 	SCCP_LIST_LOCK(&(((devicePtr)d)->buttonconfig));
@@ -1985,7 +1988,7 @@ void sccp_dev_speed_find_byindex(constDevicePtr d, const uint16_t instance, bool
 				sccp_copy_string(k->ext, config->button.speeddial.ext, sizeof(k->ext));
 				sccp_copy_string(k->hint, config->button.speeddial.hint, sizeof(k->hint));
 				
-			} else if(FALSE == withHint && sccp_strlen_zero(config->button.speeddial.hint)) {
+			} else if(FALSE == withHint && (sccp_strlen_zero(config->button.speeddial.hint) || !config->button.speeddial.hintActive)) {	/* a hint not honoured leaves an ordinary speeddial */
 				k->valid = TRUE;
 				k->instance = instance;
 				k->type = SCCP_BUTTONTYPE_SPEEDDIAL;
@@ -2067,7 +2070,17 @@ channelPtr sccp_device_getActiveChannel(constDevicePtr device)
 
 	sccp_log((DEBUGCAT_CHANNEL + DEBUGCAT_DEVICE)) (VERBOSE_PREFIX_3 "%s: Getting the active channel on device.\n", device->id);
 
- 	if (device->active_channel && (channel = sccp_channel_retain(device->active_channel))) {
+	/* read and retained under the private lock the setter swaps it under: a raw read could hand a channel to
+	 * retain whose last reference the setter was just dropping */
+	if (!device->privateData) {
+		return NULL;
+	}
+	sccp_private_lock(device->privateData);
+	if (device->active_channel) {
+		channel = sccp_channel_retain(device->active_channel);
+	}
+	sccp_private_unlock(device->privateData);
+	if (channel) {
 		if (channel && channel->state == SCCP_CHANNELSTATE_DOWN) {
 			sccp_log((DEBUGCAT_CHANNEL + DEBUGCAT_DEVICE)) (VERBOSE_PREFIX_3 "%s: 'active channel': %s on device is DOWN apparently. Returning NULL\n", device->id, channel->designator);
 			sccp_channel_release(&channel);						/* explicit release, when not returning channel because it's DOWN */
@@ -2092,18 +2105,27 @@ void __sccp_device_setActiveChannel(constDevicePtr d, constChannelPtr channel, c
 
 	if(device && device->active_channel != channel) {
 		sccp_log((DEBUGCAT_CHANNEL + DEBUGCAT_DEVICE)) (VERBOSE_PREFIX_3 "%s: Set the active channel %d on device\n", DEV_ID_LOG(d), (channel) ? channel->callid : 0);
-		if (device->active_channel && device->active_channel->line) {
-			device->active_channel->line->statistic.numberOfActiveChannels--;
+		/* swapped under the private lock (see sccp_device_getActiveChannel); the previous channel's reference is
+		 * dropped after unlocking, its destructor must not run under the device lock */
+		sccp_channel_t *newchannel = channel ? sccp_channel_retain(channel) : NULL;
+		sccp_private_lock(device->privateData);
+		sccp_channel_t *oldchannel = device->active_channel;
+		device->active_channel = newchannel;
+		sccp_private_unlock(device->privateData);
+
+		if (oldchannel && oldchannel->line) {
+			oldchannel->line->statistic.numberOfActiveChannels--;
 		}
-		if (!channel) {
+		if (newchannel) {
+			sccp_dev_setActiveLine(device, newchannel->line);
+			if (newchannel->line) {
+				newchannel->line->statistic.numberOfActiveChannels++;
+			}
+		} else {
 			sccp_dev_setActiveLine(device, NULL);
 		}
-		sccp_channel_refreplace(&device->active_channel, channel);
-		if (device->active_channel) {
-			sccp_dev_setActiveLine(device, device->active_channel->line);
-			if (device->active_channel->line) {
-				device->active_channel->line->statistic.numberOfActiveChannels++;
-			}
+		if (oldchannel) {
+			sccp_channel_release(&oldchannel);							/* explicit release of the previous active channel */
 		}
 	}
 }
@@ -3311,7 +3333,7 @@ static sccp_push_result_t sccp_device_pushTextMessage(constDevicePtr device, con
 		return SCCP_PUSH_RESULT_FAIL;
 	}
 
-	if ((device->protocolversion < 17 && 1024 > msg_length) || sccp_strlen(messageText) > 4000) {
+	if ((device->protocolversion < 17 && 1024 < msg_length) || sccp_strlen(messageText) > 4000) {		/* the guard was inverted */
 		sccp_log((DEBUGCAT_DEVICE)) (VERBOSE_PREFIX_3 "%s: (pushTextMessage) messageText is to long.\n", DEV_ID_LOG(device));
 		return SCCP_PUSH_RESULT_FAIL;
 	}
@@ -3319,6 +3341,7 @@ static sccp_push_result_t sccp_device_pushTextMessage(constDevicePtr device, con
 	const char *xmlTitleFormat = "<Title>%s</Title>";
 	size_t title_length = strlen(xmlTitleFormat) + sccp_strlen(from) - 2 /* for the %s */  + 1 /* for terminator */ ;
 	char title[title_length];
+	title[0] = '\0';											/* used below without a sender too */
 
 	if (!sccp_strlen_zero(from)) {
 		msg_length += title_length;
@@ -3360,7 +3383,7 @@ uint8_t __PURE__ sccp_device_find_index_for_line(constDevicePtr d, const char *l
 
 gcc_inline int16_t sccp_device_buttonIndex2lineInstance(constDevicePtr d, uint16_t buttonIndex)
 {
-	if (buttonIndex > 0 && buttonIndex < StationMaxButtonTemplateSize && d->buttonTemplate[buttonIndex - 1].instance) {
+	if (d->buttonTemplate && buttonIndex > 0 && buttonIndex < StationMaxButtonTemplateSize && d->buttonTemplate[buttonIndex - 1].instance) {	/* NULL before the template request and after cleanup */
 		return d->buttonTemplate[buttonIndex - 1].instance;
 	}
 	pbx_log(LOG_ERROR, "%s: buttonIndex2lineInstance for buttonIndex:%d failed!\n", d->id, buttonIndex);
@@ -3476,11 +3499,28 @@ void sccp_device_setMWI(devicePtr device)
 {
 	device->voicemailStatistic.newmsgs = 0;
 	device->voicemailStatistic.oldmsgs = 0;
-	for (uint8_t instance = SCCP_FIRST_LINEINSTANCE; instance < device->lineButtons.size; instance++) {
-		if(device->lineButtons.instance[instance]) {
-			linePtr l = device->lineButtons.instance[instance]->line;
-			device->voicemailStatistic.newmsgs += l->voicemailStatistic.newmsgs;
-			device->voicemailStatistic.oldmsgs += l->voicemailStatistic.oldmsgs;
+	/* a line on several buttons is counted once (it reported N times the messages); size and array are read once */
+	const uint8_t buttonCount = device->lineButtons.size;
+	sccp_linedevice_t ** const buttons = device->lineButtons.instance;
+	if (buttons && buttonCount > SCCP_FIRST_LINEINSTANCE) {
+		const sccp_line_t * counted[buttonCount];
+		uint8_t numcounted = 0;
+		for (uint8_t instance = SCCP_FIRST_LINEINSTANCE; instance < buttonCount; instance++) {
+			if (buttons[instance] && buttons[instance]->line) {
+				linePtr l = buttons[instance]->line;
+				boolean_t already_counted = FALSE;
+				for (uint8_t i = 0; i < numcounted; i++) {
+					if (counted[i] == l) {
+						already_counted = TRUE;
+						break;
+					}
+				}
+				if (!already_counted) {
+					device->voicemailStatistic.newmsgs += l->voicemailStatistic.newmsgs;
+					device->voicemailStatistic.oldmsgs += l->voicemailStatistic.oldmsgs;
+					counted[numcounted++] = l;
+				}
+			}
 		}
 	}
 	sccp_log((DEBUGCAT_MWI)) (VERBOSE_PREFIX_3 "%s: (sccp_device_setMWI), newmsgs:%d, oldmsgs:%d\n", device->id, device->voicemailStatistic.newmsgs, device->voicemailStatistic.oldmsgs);

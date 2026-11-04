@@ -48,6 +48,7 @@ struct sccp_buttonconfig {
 		struct /* sccp_speeddial */ {
 			char *ext;										/*!< SpeedDial Extension */
 			char *hint;										/*!< SpeedDIal Hint */
+			boolean_t hintActive;									/*!< Hint honoured on this device (set while building the button template) */
 		} speeddial;											/*!< SCCP Button Speeddial Structure */
 
 		/*!
