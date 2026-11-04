@@ -1010,7 +1010,9 @@ static int sccp_asterisk_managerHookHelper(int category, const char *event, char
 	char * dupStr = NULL;
 
 	if (EVENT_FLAG_CALL == category) {
-		if (!strcasecmp("MonitorStart", event) || !strcasecmp("MonitorStop", event)) {
+		/* the MixMonitor events too (sccp_feat_monitor drives MixMonitor): without them the feature state never became
+		 * active, the key kept its label, and every press started another recording */
+		if (!strcasecmp("MonitorStart", event) || !strcasecmp("MonitorStop", event) || !strcasecmp("MixMonitorStart", event) || !strcasecmp("MixMonitorStop", event)) {
 			AUTO_RELEASE(sccp_channel_t, channel , NULL);
 			struct message m = { 0 };
 
@@ -1039,7 +1041,7 @@ static int sccp_asterisk_managerHookHelper(int category, const char *event, char
 				AUTO_RELEASE(sccp_device_t, d , sccp_channel_getDevice(channel));
 				if (d) {
 					sccp_log(DEBUGCAT_CORE)("%s: (managerHookHelper) MonitorStart/MonitorStop on Device: %s\n", channel->designator, d->id);	/* temp */
-					if (!strcasecmp("MonitorStart", event)) {
+					if (!strcasecmp("MonitorStart", event) || !strcasecmp("MixMonitorStart", event)) {
 						d->monitorFeature.status |= SCCP_FEATURE_MONITOR_STATE_ACTIVE;
 					} else {
 						d->monitorFeature.status &= ~SCCP_FEATURE_MONITOR_STATE_ACTIVE;

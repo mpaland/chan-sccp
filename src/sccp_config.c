@@ -3172,7 +3172,7 @@ static uint8_t sccp_config_readSoftKeySet(uint8_t * softkeyset, const char * dat
 	char * label = strtok_r(labels, delims, &labelrest);
 	while (label) {
 		label = pbx_strip(label);
-		if ((softkey = sccp_config_getSoftkeyLbl(label)) != -1 && (i + 1) < StationMaxSoftKeySetDefinition) {
+		if ((softkey = sccp_config_getSoftkeyLbl(label)) != -1 && i < StationMaxSoftKeySetDefinition) {	/* (i + 1) dropped the 16th key */
 			softkeyset[i++] = softkey;
 		}
 		label = strtok_r(NULL, delims, &labelrest);
@@ -3560,7 +3560,8 @@ int sccp_manager_config_metadata(struct mansession * s, const struct message * m
 							astman_append(s, "\"DefaultValue\":\"%s\"", config[cur_elem].defaultValue);
 
 							if (!sccp_strlen_zero(config[cur_elem].description)) {
-								char * description      = pbx_strdup(config[cur_elem].description);
+								char * description_orig = pbx_strdup(config[cur_elem].description);	/* strsep walks description: free the start */
+								char * description      = description_orig;
 								char * description_part = "";
 								int    comma2           = 0;
 
@@ -3569,7 +3570,7 @@ int sccp_manager_config_metadata(struct mansession * s, const struct message * m
 									astman_append(s, "%s\"%s\"", comma2++ ? "," : "", description_part);
 								}
 								astman_append(s, "]");
-								sccp_free(description);
+								sccp_free(description_orig);
 							}
 						}
 						astman_append(s, "}");

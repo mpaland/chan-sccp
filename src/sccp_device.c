@@ -3236,7 +3236,7 @@ void sccp_device_featureChangedDisplay(const sccp_event_t * event)
 			}
 			break;
 		case SCCP_FEATURE_MONITOR:
-			if (device->monitorFeature.status & (SCCP_FEATURE_MONITOR_STATE_REQUESTED | SCCP_FEATURE_MONITOR_STATE_ACTIVE)) {
+			if (device->monitorFeature.status & SCCP_FEATURE_MONITOR_STATE_ACTIVE) {			/* REQUESTED is the "awaiting call" branch below */
 				//sccp_device_addMessageToStack(device, SCCP_MESSAGE_PRIORITY_MONITOR, SKINNY_DISP_RECORDING);
 				sccp_dev_set_message(device, SKINNY_DISP_RECORDING, SCCP_DISPLAYSTATUS_TIMEOUT, FALSE, FALSE);
 			} else if (device->monitorFeature.status & SCCP_FEATURE_MONITOR_STATE_REQUESTED) {

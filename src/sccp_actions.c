@@ -1984,6 +1984,7 @@ static void handle_stimulus_conference(constDevicePtr d, constLinePtr l, const u
 
 	if (channel) {
 		sccp_feat_handle_conference(d, l, instance, channel);
+		return;											/* the warning and beep-bonk are the no-call case */
 	}
 	pbx_log(LOG_WARNING, "%s: No call to handle conference for on line %d\n", d->id, instance);
 	sccp_dev_starttone(d, SKINNY_TONE_BEEPBONK, 0, 0, SKINNY_TONEDIRECTION_USER);
@@ -2096,10 +2097,13 @@ static void handle_stimulus_groupcallpickup(constDevicePtr d, constLinePtr l, co
 	if (channel) {
 		channel->softswitch_action = SCCP_SOFTSWITCH_DIAL;
 		channel->ss_data = 0;
-		iPbx.getPickupExtension(channel, channel->dialedNumber);
-		sccp_indicate(d, channel, SCCP_CHANNELSTATE_SPEEDDIAL);
-		iPbx.set_callstate(channel, AST_STATE_OFFHOOK);
-		sccp_pbx_softswitch(channel);
+		if (iPbx.getPickupExtension(channel, channel->dialedNumber)) {
+			sccp_indicate(d, channel, SCCP_CHANNELSTATE_SPEEDDIAL);
+			iPbx.set_callstate(channel, AST_STATE_OFFHOOK);
+			sccp_pbx_softswitch(channel);
+		} else {
+			sccp_channel_endcall(channel);								/* no pickup extension: do not dial an empty number */
+		}
 	}
 
 	//if (!(channel = sccp_channel_newcall(l, d, "pickupexten", SKINNY_CALLTYPE_OUTBOUND, NULL, NULL))) {
@@ -2195,12 +2199,17 @@ static void handle_feature_action(constDevicePtr d, const int instance, const bo
 				}
 			}
 
-			SCCP_LIST_TRAVERSE(&d->buttonconfig, config, list) {
-				if (config->type == LINE) {
-					AUTO_RELEASE(sccp_line_t, line , sccp_line_find_byname(config->button.line.name, FALSE));
+			{
+				/* its own iterator: reusing config left it NULL after the loop, so the feature button's
+				 * sccp_feat_changed() at the end of this function was skipped */
+				sccp_buttonconfig_t *lineConfig = NULL;
+				SCCP_LIST_TRAVERSE(&d->buttonconfig, lineConfig, list) {
+					if (lineConfig->type == LINE) {
+						AUTO_RELEASE(sccp_line_t, line , sccp_line_find_byname(lineConfig->button.line.name, FALSE));
 
-					if (line) {
-						sccp_line_cfwd(line, d, status, featureOption);
+						if (line) {
+							sccp_line_cfwd(line, d, status, featureOption);
+						}
 					}
 				}
 			}
