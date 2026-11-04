@@ -2901,6 +2901,9 @@ void handle_soft_key_set_req(constSessionPtr s, devicePtr d, constMessagePtr msg
 			if (b[c] == SKINNY_LBL_CONFRN) {
 				continue;
 			}
+			if (b[c] == SKINNY_LBL_CONFLIST) {							/* no conference list without conferences either */
+				continue;
+			}
 #endif
 #ifdef CS_SCCP_PICKUP
 			if ((b[c] == SKINNY_LBL_PICKUP) && (!directed_pickup)) {
