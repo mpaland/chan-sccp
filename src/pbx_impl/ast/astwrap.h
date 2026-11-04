@@ -110,7 +110,8 @@ int pbx_manager_register(const char *action, int authority, int (*func) (struct 
 	{													\
 		const char *id = astman_get_header(m, "ActionID");						\
 		static char *cli_ami_params[] = { CLI_COMMAND, CLI_AMI_PARAMS };				\
-		static char *arguments[ARRAY_LEN(cli_ami_params)];						\
+		/* not static: two AMI sessions running the same action filled one shared array */		\
+		char *arguments[ARRAY_LEN(cli_ami_params)] = { NULL };						\
 		uint8_t x = 0, i = 0; 										\
 		for (x=0; x < ARRAY_LEN(cli_ami_params); x++) {							\
 			if(NULL != cli_ami_params[x] && strlen(cli_ami_params[x]) > 0){				\
@@ -126,7 +127,15 @@ int pbx_manager_register(const char *action, int authority, int (*func) (struct 
 		if ((_EVENTLIST) == TRUE) {									\
 			astman_send_listack(s, m, AMI_COMMAND " list will follow", "start");			\
 		}												\
-		if (RESULT_SUCCESS==_CALLED_FUNCTION(-1, &totals, s, m, ARRAY_LEN(arguments), arguments)) {	\
+		/* astman_get_header returns "" for an absent header: trim the empty tail of the parameters	\
+		 * so argc counts the ones given, as on the CLI (it used to be the array length, so optional	\
+		 * parameters could never be left out). The command words themselves always count. */		\
+		static const char *cli_ami_command_words[] = { CLI_COMMAND };					\
+		int argc = i;											\
+		while (argc > (int)ARRAY_LEN(cli_ami_command_words) && pbx_strlen_zero(arguments[argc - 1])) {	\
+			argc--;											\
+		}												\
+		if (RESULT_SUCCESS==_CALLED_FUNCTION(-1, &totals, s, m, argc, arguments)) {			\
 			if ((_EVENTLIST) == TRUE) {								\
 				astman_append(s,								\
 				"Event: " AMI_COMMAND "Complete\r\n"						\
@@ -176,7 +185,7 @@ int pbx_manager_register(const char *action, int authority, int (*func) (struct 
                         m.hdrcount++;                                        					\
                 }												\
                 int result = (_CALLED_FUNCTION)(a->fd, NULL, NULL, &m, a->argc, (char **) a->argv);		\
-		for(int x = 0; (int)ARRAY_LEN(cli_ami_params) && x < a->argc; x++) { 				\
+		for(unsigned int x = 0; x < m.hdrcount; x++) {							\
 			sccp_free(m.headers[x]);								\
 		}												\
 		switch (result) {										\
