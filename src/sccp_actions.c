@@ -519,6 +519,9 @@ void handle_token_request(constSessionPtr s, devicePtr no_d, constMessagePtr msg
 		if (sccp_false(GLOB(token_fallback))) {
 			sccp_log_and((DEBUGCAT_ACTION + DEBUGCAT_CORE)) (VERBOSE_PREFIX_2 "%s: Sending phone a token rejection (sccp.conf:fallback=%s)\n", deviceName, GLOB(token_fallback));
 			sccp_session_tokenReject(s, token_backoff_time);
+			/* done with this request: falling through reached the crossover cleanup below, which tore down the
+			 * live session of a registered device (with the default fallback=no) and sent a second reject */
+			return;
 		}
 	}
 	if (!skinny_devicetype_exists(deviceType)) {
@@ -531,7 +534,8 @@ void handle_token_request(constSessionPtr s, devicePtr no_d, constMessagePtr msg
 		AUTO_RELEASE(sccp_device_t, tmpdevice , sccp_device_find_byid(deviceName, FALSE));
 		if (tmpdevice) {
 			skinny_registrationstate_t state = sccp_device_getRegistrationState(tmpdevice);
-			if (state == SKINNY_DEVICE_RS_TOKEN && tmpdevice->registrationTime < time(0) + token_backoff_time) {
+			/* within the backoff since the last token was sent (the old test compared a past time with a future one and always matched) */
+			if (state == SKINNY_DEVICE_RS_TOKEN && time(0) - tmpdevice->registrationTime < token_backoff_time) {
 				pbx_log(LOG_NOTICE, "%s: Token already sent, giving up (regState: %s, tokenState:%s, registrationTime:%d)\n", deviceName, skinny_registrationstate2str(state),
 					sccp_tokenstate2str(tmpdevice->status.token), (int)(tmpdevice->registrationTime));
 				tmpdevice->registrationTime = time(0);
@@ -590,7 +594,10 @@ void handle_token_request(constSessionPtr s, devicePtr no_d, constMessagePtr msg
 
 	/* accepting token by default */
 	boolean_t sendAck = TRUE;
-	int last_digit = deviceName[strlen(deviceName)];
+	/* the last character of the name splits the devices between the members of an active/active cluster;
+	 * deviceName[strlen(deviceName)] is the terminator, so it was always 0 */
+	size_t deviceNameLen = strlen(deviceName);
+	int last_digit = deviceNameLen ? deviceName[deviceNameLen - 1] : 0;
 	if (!sccp_strlen_zero(GLOB(token_fallback))) {
 		if (sccp_false(GLOB(token_fallback))) {
 			sendAck = FALSE;
@@ -600,13 +607,10 @@ void handle_token_request(constSessionPtr s, devicePtr no_d, constMessagePtr msg
 				sendAck = TRUE;
 			}
 		} else if (!strcasecmp("odd", GLOB(token_fallback))) {
-			if (last_digit % 2 != 0) {
-				sendAck = TRUE;
-			}
+			/* assigned both ways: only raising the (already raised) default never declined, so the cluster never split */
+			sendAck = (last_digit % 2 != 0);
 		} else if (!strcasecmp("even", GLOB(token_fallback))) {
-			if (last_digit % 2 == 0) {
-				sendAck = TRUE;
-			}
+			sendAck = (last_digit % 2 == 0);
 		} else if (strstr(GLOB(token_fallback), "/") != NULL) {
 			struct stat sb = { 0 };
 			if (stat(GLOB(token_fallback), &sb) == 0 && sb.st_mode & S_IXUSR) {
@@ -623,7 +627,12 @@ void handle_token_request(constSessionPtr s, devicePtr no_d, constMessagePtr msg
 				pp = popen(command, "r");
 				if (pp != NULL) {
 					while (fgets(buff, sizeof(buff) - 1, pp)) {
-						snprintf(output + strlen(output), sizeof(output) - 1, "%s", buff);
+						/* the size is what is left in output, not the whole buffer */
+						size_t used = strlen(output);
+						if (used >= sizeof(output) - 1) {
+							break;
+						}
+						snprintf(output + used, sizeof(output) - used, "%s", buff);
 					}
 					pclose(pp);
 					sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_3 "%s: (token_request), script result='%s'\n", deviceName, (char *) output);
@@ -727,7 +736,8 @@ void handle_SPCPTokenReq(constSessionPtr s, devicePtr no_d, constMessagePtr msg_
 		AUTO_RELEASE(sccp_device_t, tmpdevice , sccp_device_find_byid(deviceName, FALSE));
 		if (tmpdevice) {
 			skinny_registrationstate_t state = sccp_device_getRegistrationState(tmpdevice);
-			if (state == SKINNY_DEVICE_RS_TOKEN && tmpdevice->registrationTime < time(0) + token_backoff_time) {
+			/* within the backoff since the last token was sent (the old test compared a past time with a future one and always matched) */
+			if (state == SKINNY_DEVICE_RS_TOKEN && time(0) - tmpdevice->registrationTime < token_backoff_time) {
 				pbx_log(LOG_NOTICE, "%s: Token already sent, giving up (regState: %s, tokenState:%s, registrationTime:%d)\n", deviceName, skinny_registrationstate2str(state),
 					sccp_tokenstate2str(tmpdevice->status.token), (int)(tmpdevice->registrationTime - time(0)));
 				tmpdevice->registrationTime = time(0);
