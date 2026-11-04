@@ -695,7 +695,7 @@ int sccp_apply_ha_default(const struct sccp_ha *ha, const struct sockaddr_storag
 		struct sockaddr_storage mapped_addr;
 		const struct sockaddr_storage * addr_to_use = NULL;
 
-		if (sccp_netsock_is_IPv4(&ha->netaddr)) {
+		if (sccp_netsock_is_IPv4(&current_ha->netaddr)) {				/* the family of this rule, not of the first one */
 			if (sccp_netsock_is_IPv6(addr)) {
 				if (sccp_netsock_is_mapped_IPv4(addr)) {
 					if (!sccp_netsock_ipv4_mapped(addr, &mapped_addr)) {

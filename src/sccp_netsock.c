@@ -156,6 +156,7 @@ static boolean_t __netsock_resolve_first_af(struct sockaddr_storage *addr, const
 	if(e == 0) {
 		memcpy(addr, res->ai_addr, res->ai_addrlen);
 		result = TRUE;
+		freeaddrinfo(res);										/* only a successful lookup returns a list to free */
 	} else {
 		if (e == EAI_NONAME) {
 			pbx_log(LOG_ERROR, "SCCP: name:%s could not be resolved\n", name);
@@ -163,7 +164,6 @@ static boolean_t __netsock_resolve_first_af(struct sockaddr_storage *addr, const
 			pbx_log(LOG_ERROR, "getaddrinfo(\"%s\") failed: %s\n", name, gai_strerror(e));
 		}
 	}
-	freeaddrinfo(res);
 	return result;
 }
 

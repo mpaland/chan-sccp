@@ -1079,6 +1079,7 @@ static void * accept_thread(void * data)
 
 	while (GLOB(module_running) && !context->accept_stop) {
 		memset(&new_sc, 0, sizeof(new_sc));
+		new_sc.fd = -1;											/* a transport that fails without touching fd must not leave a valid looking 0 */
 		context->transport->accept_connection(&context->sc, (struct sockaddr *)&incoming, &length, &new_sc);
 		if (context->accept_stop) {
 			if (new_sc.fd > -1) {
@@ -1177,7 +1178,7 @@ boolean_t sccp_session_bind_and_listen(sccp_servercontext_t * context, struct so
 {
 	int result = FALSE;
 	// static struct sockaddr_storage boundaddr = {0};
-	static int port = -1;
+	int port = -1;												/* not static: the TCP and TLS contexts each bind their own */
 	char addrStr[INET6_ADDRSTRLEN];
 	sccp_copy_string(addrStr, sccp_netsock_stringify_addr(bindaddr), sizeof(addrStr));
 
@@ -1248,6 +1249,7 @@ boolean_t sccp_session_bind_and_listen(sccp_servercontext_t * context, struct so
 	}
 
 	if(context->sc.fd > -1) {
+		port = sccp_netsock_getPort(&context->boundaddr);						/* also right when the socket was reused */
 		sccp_log((DEBUGCAT_CORE))(VERBOSE_PREFIX_3 "SCCP: Listening on %s:%d using socket:%d\n", addrStr, port, context->sc.fd);
 		sccp_log((DEBUGCAT_SOCKET))(VERBOSE_PREFIX_3 "SCCP: using default ip:%s\n", ast_sockaddr_stringify_addr(&internip));
 		result = TRUE;
