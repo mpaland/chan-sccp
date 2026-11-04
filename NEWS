@@ -1,3 +1,38 @@
+Version: unreleased
+==========================
+
+ Fixes ported from the nortien/chan-sccp fork (re-done on this tree, see doc/ANALYSIS.md section 7):
+
+ - Security / robustness, triggerable from the network:
+   - Stack overflow in the XMLAlarm handler, which runs before registration (unbounded sscanf)
+   - Out of bounds writes from AccessoryStatus, CapabilitiesRes, ExtensionDeviceCaps (button template) and
+     other phone supplied counts and lengths
+   - A Register or token request without a device name crashed Asterisk (NULL endpoint)
+   - Failed TLS handshakes were accepted; permit=internal admitted the public 172.0.0.0-172.15.255.255 range;
+     mixed IPv4/IPv6 ACLs were evaluated with the wrong family; permithost was never checked
+   - With the default fallback=no a token request tore down the live session of a registered phone
+   - AMI actions that act on phones and calls were registered with the read-only reporting class
+   - Dialplan functions, the composed line id of Dial(SCCP/...) and several string helpers overflowed
+     fixed size buffers
+ - Resolved issues:
+   - Record did not work on Asterisk 21+ (res_monitor is gone): it uses MixMonitor now
+   - Parkinglot deadlock between registration and park events, and its use-after-free races
+   - Transfer refused while the destination was alerting; the codec preferences of a device eroded with
+     every call; late media acks silenced calls; closing video stopped the audio
+   - Hinted speeddials were empty on phones without multi-purpose buttons (upstream #566); device state
+     button status requests went unanswered (upstream #564)
+   - Sessions of phones registered through a token handshake never timed out
+   - SCCPCallForward, SCCPDndDevice and SCCPLineForwardUpdate did not work over AMI
+   - 'make dist' and 'make uninstall' work again
+   - Many smaller defects in the CLI, configuration parsing, conference, hint and adapter code
+ - Changes:
+   - A shared line taken off hook is shown as in use on the other phones sharing it
+   - The Park softkey is greyed while Asterisk has no parking provider
+   - Conference and video support are built by default (--disable-conference, --disable-video)
+   - AMI accounts need write=command (CLI wrapper actions), write=call or write=config (SCCP* call and
+     device actions) instead of write=reporting for actions that change something
+   - The device level directed_pickup options are obsolete (the line options are used)
+
 Version: v4.4.0
 ==========================
 
