@@ -1718,7 +1718,8 @@ Optional Features:
   --disable-park          disable park functionality
   --disable-dirtrfr       disable direct transfer
   --disable-monitor       disable feature monitor)
-  --enable-conference     enable conference (>ast 1.6.2)
+  --disable-conference    build without phone driven conferencing (on by
+                          default)
   --disable-manager       disabled ast manager events
   --disable-functions     disabled Dialplan functions
   --disable-realtime      disable realtime support
@@ -1732,7 +1733,8 @@ Optional Features:
                           disable dynamic speeddials
   --disable-dynamic-speeddial-cid
                           disable dynamic speeddials with call info
-  --enable-video          enable streaming video (experimental)
+  --disable-video         build without video between phones (on by default,
+                          experimental)
   --enable-distributed-devicestate
                           enable distributed devicestate via the stasis device
                           state topic
@@ -30760,12 +30762,12 @@ fi
 printf "%s\n" "--enable-monitor: ${ac_cv_use_monitor}" >&6; }
 
 
-	# Check whether --enable-conference was given.
+			# Check whether --enable-conference was given.
 if test ${enable_conference+y}
 then :
   enableval=$enable_conference; ac_cv_use_conference=$enableval
 else case e in #(
-  e) ac_cv_use_conference=no
+  e) ac_cv_use_conference=yes
 	 ;;
 esac
 fi
@@ -30960,12 +30962,12 @@ fi
 printf "%s\n" "--enable-dynamic-speeddial_cid: ${ac_cv_dynamic_speeddial_cid}" >&6; }
 
 
-	# Check whether --enable-video was given.
+		# Check whether --enable-video was given.
 if test ${enable_video+y}
 then :
   enableval=$enable_video; ac_cv_streaming_video=$enableval
 else case e in #(
-  e) ac_cv_streaming_video=no
+  e) ac_cv_streaming_video=yes
 	 ;;
 esac
 fi
