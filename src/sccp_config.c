@@ -1670,7 +1670,7 @@ sccp_value_changed_t sccp_config_parse_deny_permit(void * const dest, const size
 				errors |= error;
 				ha = sccp_append_ha("permit", "10.0.0.0/255.0.0.0", ha, &error);
 				errors |= error;
-				ha = sccp_append_ha("permit", "172.16.0.0/255.224.0.0", ha, &error);
+				ha = sccp_append_ha("permit", "172.16.0.0/255.240.0.0", ha, &error);		/* RFC1918 172.16/12; /11 admitted public 172.0-172.15 */
 				errors |= error;
 				ha = sccp_append_ha("permit", "192.168.0.0/255.255.0.0", ha, &error);
 			} else {
@@ -1730,11 +1730,18 @@ sccp_value_changed_t sccp_config_parse_permithosts(void * const dest, const size
 	SCCP_LIST_HEAD(hostname, sccp_hostname_t) * permithostList = (struct hostname *)dest;
 
 	PBX_VARIABLE_TYPE * v         = NULL;
-	int                 listCount = SCCP_LIST_GETSIZE(permithostList);
+	int                 listCount = 0;
 	int                 varCount  = 0;
 	int                 found     = 0;
 
+	/* the list is read by the ACL check of a registering phone while a reload rewrites it */
+	SCCP_LIST_LOCK(permithostList);
+	listCount = SCCP_LIST_GETSIZE(permithostList);
+	/* an empty value is the config engine clearing the option, not a host: skip it in both passes */
 	for (v = vroot; v; v = v->next) {
+		if (sccp_strlen_zero(v->value)) {
+			continue;
+		}
 		SCCP_LIST_TRAVERSE(permithostList, permithost, list) {
 			if (sccp_strcaseequals(permithost->name, v->value)) {                                        // variable found
 				found++;
@@ -1748,8 +1755,12 @@ sccp_value_changed_t sccp_config_parse_permithosts(void * const dest, const size
 			sccp_free(permithost);
 		}
 		for (v = vroot; v; v = v->next) {
+			if (sccp_strlen_zero(v->value)) {
+				continue;
+			}
 			if (!(permithost = (sccp_hostname_t *)sccp_calloc(1, sizeof(sccp_hostname_t)))) {
 				pbx_log(LOG_ERROR, SS_Memory_Allocation_Error, "SCCP");
+				SCCP_LIST_UNLOCK(permithostList);
 				return SCCP_CONFIG_CHANGE_ERROR;
 			}
 			sccp_copy_string(permithost->name, v->value, sizeof(permithost->name));
@@ -1757,6 +1768,7 @@ sccp_value_changed_t sccp_config_parse_permithosts(void * const dest, const size
 		}
 		changed = SCCP_CONFIG_CHANGE_CHANGED;
 	}
+	SCCP_LIST_UNLOCK(permithostList);
 	return changed;
 }
 

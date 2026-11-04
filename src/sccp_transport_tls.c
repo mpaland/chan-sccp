@@ -125,11 +125,16 @@ static boolean_t configure_context(SSL_CTX * ctx)
 const sccp_transport_t * const tls_init(void)
 {
 	sccp_log(DEBUGCAT_SOCKET)(VERBOSE_PREFIX_1 "TLS Transport Initializing...\n");
+	InitializeSSL();											/* the library is initialised before the first SSL_CTX_new */
 	sslctx = create_context();
 	if (sslctx && configure_context(sslctx)) {
-		InitializeSSL();
 		return &tlstransport;
 	}
+	if (sslctx) {
+		SSL_CTX_free(sslctx);
+		sslctx = NULL;
+	}
+	DestroySSL();
 	return NULL;
 }
 
@@ -147,9 +152,10 @@ static int tls_listen(sccp_socket_connection_t * sc, int backlog)
 
 static sccp_socket_connection_t * tls_accept(sccp_socket_connection_t * in_sc, struct sockaddr * addr, socklen_t * addrlen, sccp_socket_connection_t * out_sc)
 {
-	unsigned long ssl_err;
-	int           newfd = 0;
+	int           ssl_ret = 0;										/* SSL_accept returns -1, 0 or 1: an unsigned type let -1 pass the <= 0 test */
+	int           newfd = -1;
 	SSL *         ssl   = NULL;
+	out_sc->fd = -1;											/* the caller tells failure by out_sc->fd, not by the return value */
 	// sccp_log(DEBUGCAT_SOCKET)(VERBOSE_PREFIX_1 "TLS Transport accept...\n");
 	do {
 		newfd = accept(in_sc->fd, addr, addrlen);
@@ -165,9 +171,9 @@ static sccp_socket_connection_t * tls_accept(sccp_socket_connection_t * in_sc, s
 		}
 
 		SSL_set_fd(ssl, newfd);
-		ssl_err = SSL_accept(ssl);
-		if (ssl_err <= 0) {
-			pbx_log(LOG_ERROR, "SSL Error occured: %lu '%s'.\n", ssl_err, ERR_reason_error_string(ssl_err));
+		ssl_ret = SSL_accept(ssl);
+		if (ssl_ret <= 0) {
+			pbx_log(LOG_ERROR, "SSL accept failed (ret:%d, ssl_error:%d)\n", ssl_ret, SSL_get_error(ssl, ssl_ret));
 			break;
 		}
 		out_sc->fd  = newfd;
@@ -184,6 +190,8 @@ static sccp_socket_connection_t * tls_accept(sccp_socket_connection_t * in_sc, s
 	if (newfd >= 0) {
 		close(newfd);
 	}
+	out_sc->fd  = -1;
+	out_sc->ssl = NULL;
 	return NULL;
 }
 
@@ -223,6 +231,10 @@ static int tls_close(sccp_socket_connection_t * sc)
 static const sccp_transport_t * const tls_destroy(uint8_t h)
 {
 	sccp_log(DEBUGCAT_SOCKET)(VERBOSE_PREFIX_1 "TLS Transport destroy...\n");
+	if (sslctx) {
+		SSL_CTX_free(sslctx);										/* one context per module load, it was never freed */
+		sslctx = NULL;
+	}
 	DestroySSL();
 	return NULL;
 }

@@ -1023,9 +1023,11 @@ static int sccp_show_device(int fd, sccp_cli_totals_t *totals, struct mansession
 	sccp_accessory_t activeAccessory = sccp_device_getActiveAccessory(d);
 	sccp_accessorystate_t activeAccessoryState = sccp_device_getAccessoryStatus(d, activeAccessory);
 
+	SCCP_LIST_LOCK(&d->permithosts);								/* a reload rewrites the list */
 	SCCP_LIST_TRAVERSE(&d->permithosts, hostname, list) {
 		ast_str_append(&permithost_buf, DEFAULT_PBX_STR_BUFFERSIZE, "%s ", hostname->name);
 	}
+	SCCP_LIST_UNLOCK(&d->permithosts);
 
 	if (!s) {
 		CLI_AMI_OUTPUT(fd, s, "\n--- SCCP channel driver device settings ----------------------------------------------------------------------------------\n");

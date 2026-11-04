@@ -36,6 +36,7 @@
 SCCP_FILE_VERSION(__FILE__, "");
 
 #  include <asterisk/acl.h>
+#include <netdb.h>												// getaddrinfo (permithost check)
 #if HAVE_ICONV
 #	include <iconv.h>
 int sccp_device_createiconv(devicePtr d);
@@ -340,33 +341,55 @@ static boolean_t sccp_device_checkACL(constDevicePtr device)
 		// checking permithosts
 		struct ast_str *ha_buf = pbx_str_alloca(DEFAULT_PBX_STR_BUFFERSIZE);
 
-		sccp_print_ha(ha_buf, DEFAULT_PBX_STR_BUFFERSIZE, GLOB(ha));
+		sccp_print_ha(ha_buf, DEFAULT_PBX_STR_BUFFERSIZE, device->ha);
 
 		sccp_log((DEBUGCAT_DEVICE)) (VERBOSE_PREFIX_3 "%s: not allowed by deny/permit list (%s). Checking permithost list...\n", device->id, pbx_str_buffer(ha_buf));
 
-		/*! \todo check permithosts with IPv6 */
-		/*
-		   struct ast_hostent ahp;
-		   struct hostent *hp;
-		   sccp_hostname_t *permithost;
+		/* permithost: the connecting address may match any address a configured name resolves to (A and AAAA).
+		 * This used to be commented out, so the option was parsed and silently ignored. The names are copied
+		 * while the list is locked (a reload rewrites it) and resolved after unlocking; the lookup only happens
+		 * on this reject path, on the registering phone's own session thread. */
+		struct sockaddr_storage peer = { 0 };
+		if (!sccp_netsock_is_mapped_IPv4(&sas) || !sccp_netsock_ipv4_mapped(&sas, &peer)) {
+			memcpy(&peer, &sas, sizeof(peer));
+		}
+		char (*names)[SCCP_MAX_HOSTNAME_LEN] = NULL;
+		int numhosts = 0;
+		sccp_hostname_t *permithost = NULL;
 
-		   uint8_t i = 0;
+		SCCP_LIST_LOCK(&((devicePtr)device)->permithosts);
+		int listsize = SCCP_LIST_GETSIZE(&device->permithosts);
+		if (listsize > 0 && (names = (char (*)[SCCP_MAX_HOSTNAME_LEN])sccp_calloc(listsize, sizeof(*names)))) {
+			SCCP_LIST_TRAVERSE(&device->permithosts, permithost, list) {
+				if (numhosts < listsize && !sccp_strlen_zero(permithost->name)) {
+					sccp_copy_string(names[numhosts++], permithost->name, sizeof(*names));
+				}
+			}
+		}
+		SCCP_LIST_UNLOCK(&((devicePtr)device)->permithosts);
 
-		   SCCP_LIST_TRAVERSE_SAFE_BEGIN(&device->permithosts, permithost, list) {
-		   if ((hp = pbx_gethostbyname(permithost->name, &ahp))) {
-		   for (i = 0; NULL != hp->h_addr_list[i]; i++) {                                       // walk resulting ip address
-		   if (sin.sin_addr.s_addr == (*(struct in_addr *) hp->h_addr_list[i]).s_addr) {
-		   sccp_log((DEBUGCAT_DEVICE)) (VERBOSE_PREFIX_3 "%s: permithost = %s match found.\n", device->id, permithost->name);
-		   matchesACL = TRUE;
-		   continue;
-		   }
-		   }
-		   } else {
-		   sccp_log((DEBUGCAT_DEVICE)) (VERBOSE_PREFIX_3 "%s: Invalid address resolution for permithost = %s (skipping permithost).\n", device->id, permithost->name);
-		   }
-		   }
-		   SCCP_LIST_TRAVERSE_SAFE_END;
-		 */
+		for (int i = 0; i < numhosts && !matchesACL; i++) {
+			struct addrinfo hints = { .ai_family = AF_UNSPEC, .ai_socktype = SOCK_STREAM };
+			struct addrinfo * res = NULL;
+			int e = getaddrinfo(names[i], NULL, &hints, &res);
+			if (e != 0) {
+				sccp_log((DEBUGCAT_DEVICE)) (VERBOSE_PREFIX_3 "%s: could not resolve permithost '%s': %s (skipping)\n", device->id, names[i], gai_strerror(e));
+				continue;
+			}
+			for (struct addrinfo * ai = res; ai; ai = ai->ai_next) {
+				struct sockaddr_storage candidate = { 0 };
+				memcpy(&candidate, ai->ai_addr, ai->ai_addrlen < sizeof(candidate) ? ai->ai_addrlen : sizeof(candidate));
+				if ((candidate.ss_family == AF_INET || candidate.ss_family == AF_INET6) && sccp_netsock_cmp_addr(&candidate, &peer) == 0) {
+					sccp_log((DEBUGCAT_DEVICE)) (VERBOSE_PREFIX_3 "%s: permithost '%s' (%s) matches the connecting address\n", device->id, names[i], sccp_netsock_stringify_addr(&candidate));
+					matchesACL = TRUE;
+					break;
+				}
+			}
+			freeaddrinfo(res);
+		}
+		if (names) {
+			sccp_free(names);
+		}
 	} else {
 		matchesACL = TRUE;
 	}
