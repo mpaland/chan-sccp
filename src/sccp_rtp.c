@@ -249,6 +249,7 @@ void sccp_rtp_destroy(constChannelPtr c)
 		}
 		iPbx.rtp_destroy(audio->instance);
 		audio->instance = NULL;
+		audio->instance_active = FALSE;									/* a stale flag made a later create return early */
 		sccp_rtp_resetHolePunch(audio);											/* our side of the path is gone as well */
 	}
 
@@ -259,6 +260,7 @@ void sccp_rtp_destroy(constChannelPtr c)
 		}
 		iPbx.rtp_destroy(video->instance);
 		video->instance = NULL;
+		video->instance_active = FALSE;
 	}
 }
 
@@ -607,7 +609,7 @@ boolean_t sccp_rtp_getUs(constRtpPtr rtp, struct sockaddr_storage * us)
 uint16_t sccp_rtp_getServerPort(constRtpPtr rtp)
 {
 	uint16_t                port = 0;
-	struct sockaddr_storage sas;
+	struct sockaddr_storage sas = { 0 };								/* getUs leaves it untouched without an instance */
 
 	sccp_rtp_getUs(rtp, &sas);
 

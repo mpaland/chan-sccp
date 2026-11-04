@@ -1949,6 +1949,7 @@ static void handle_stimulus_transfer(constDevicePtr d, constLinePtr l, const uin
 
 	if (channel) {
 		sccp_channel_transfer(channel, d);
+		return;											/* the warning and the error tone are the no-call case */
 	}
 	pbx_log(LOG_WARNING, "%s: No call to transfer found on line %d\n", d->id, instance);
 	sccp_dev_starttone(d, SKINNY_TONE_BEEPBONK, 0, 0, SKINNY_TONEDIRECTION_USER);
@@ -3488,8 +3489,12 @@ void handle_openReceiveChannelAck(constSessionPtr s, devicePtr d, constMessagePt
 				break;
 		}
 		sccp_rtp_setState(audio, SCCP_RTP_RECEPTION, resultingChannelState);
+	} else if (channel && (sccp_rtp_getState(&channel->rtp.audio, SCCP_RTP_RECEPTION) & SCCP_RTP_STATUS_ACTIVE)) {
+		/* a late or duplicate ack for a stream that is already running (switching to direct rtp sends stop+start
+		 * before the ack of the previous start is back): tearing it down here silenced the call */
+		sccp_log(DEBUGCAT_RTP)(VERBOSE_PREFIX_3 "%s: (openReceiveChannelAck) Ignoring late/duplicate ack for %s, the stream is already active\n", d->id, channel->designator);
 	} else {
-		// we successfully opened receive channel, but have no channel active -> close receive (maybe the call was already (being) terminated)
+		// no channel, or a channel whose stream is not (any longer) open -> close (maybe the call was already (being) terminated)
 		if (mediastatus == SKINNY_MEDIASTATUS_Ok) {
 			callReference = callReference ? callReference : passThruPartyId ^ 0xFFFFFFFF;
 			sccp_msg_t *msg = NULL;
@@ -3551,8 +3556,12 @@ void handle_startMediaTransmissionAck(constSessionPtr s, devicePtr d, constMessa
 				break;
 		}
 		sccp_rtp_setState(audio, SCCP_RTP_TRANSMISSION, resultingChannelState);
+	} else if (channel && (sccp_rtp_getState(&channel->rtp.audio, SCCP_RTP_TRANSMISSION) & SCCP_RTP_STATUS_ACTIVE)) {
+		/* a late or duplicate ack for a stream that is already running (switching to direct rtp sends stop+start
+		 * before the ack of the previous start is back): tearing it down here silenced the call */
+		sccp_log(DEBUGCAT_RTP)(VERBOSE_PREFIX_3 "%s: (startMediaTransmissionAck) Ignoring late/duplicate ack for %s, the stream is already active\n", d->id, channel->designator);
 	} else {
-		// we successfully opened receive channel, but have no channel active -> close receive (maybe the call was already (being) terminated)
+		// no channel, or a channel whose stream is not (any longer) open -> close (maybe the call was already (being) terminated)
 		if (mediastatus == SKINNY_MEDIASTATUS_Ok) {
 			callReference = callReference ? callReference : (callReference1 ? callReference1 : passThruPartyId ^ 0xFFFFFFFF);
 			sccp_msg_t *msg = NULL;
@@ -3625,8 +3634,12 @@ void handle_OpenMultiMediaReceiveAck(constSessionPtr s, devicePtr d, constMessag
 				break;
 		}
 		sccp_rtp_setState(video, SCCP_RTP_RECEPTION, resultingChannelState);
+	} else if (channel && (sccp_rtp_getState(&channel->rtp.video, SCCP_RTP_RECEPTION) & SCCP_RTP_STATUS_ACTIVE)) {
+		/* a late or duplicate ack for a stream that is already running (switching to direct rtp sends stop+start
+		 * before the ack of the previous start is back): tearing it down here silenced the call */
+		sccp_log(DEBUGCAT_RTP)(VERBOSE_PREFIX_3 "%s: (OpenMultiMediaReceiveAck) Ignoring late/duplicate ack for %s, the stream is already active\n", d->id, channel->designator);
 	} else {
-		// we successfully opened receive channel, but have no channel active -> close receive (maybe the call was already (being) terminated)
+		// no channel, or a channel whose stream is not (any longer) open -> close (maybe the call was already (being) terminated)
 		if (mediastatus == SKINNY_MEDIASTATUS_Ok) {
 			callReference = callReference ? callReference : passThruPartyId ^ 0xFFFFFFFF;
 			sccp_msg_t *msg = NULL;
@@ -3693,8 +3706,12 @@ void handle_startMultiMediaTransmissionAck(constSessionPtr s, devicePtr d, const
 				break;
 		}
 		sccp_rtp_setState(video, SCCP_RTP_TRANSMISSION, resultingChannelState);
+	} else if (channel && (sccp_rtp_getState(&channel->rtp.video, SCCP_RTP_TRANSMISSION) & SCCP_RTP_STATUS_ACTIVE)) {
+		/* a late or duplicate ack for a stream that is already running (switching to direct rtp sends stop+start
+		 * before the ack of the previous start is back): tearing it down here silenced the call */
+		sccp_log(DEBUGCAT_RTP)(VERBOSE_PREFIX_3 "%s: (startMultiMediaTransmissionAck) Ignoring late/duplicate ack for %s, the stream is already active\n", d->id, channel->designator);
 	} else {
-		// we successfully opened receive channel, but have no channel active -> close receive (maybe the call was already (being) terminated)
+		// no channel, or a channel whose stream is not (any longer) open -> close (maybe the call was already (being) terminated)
 		if (mediastatus == SKINNY_MEDIASTATUS_Ok) {
 			callReference = callReference ? callReference : passThruPartyId ^ 0xFFFFFFFF;
 			sccp_msg_t *msg = NULL;

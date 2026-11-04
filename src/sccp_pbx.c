@@ -1349,7 +1349,7 @@ void * sccp_pbx_softswitch(constChannelPtr channel)
 		/*! \todo DdG: Extra wait time is incurred when checking pbx_exists_extension, when a wrong number is dialed. storing extension_exists status for sccp_log use */
 		int extension_exists = SCCP_EXTENSION_NOTEXISTS;
 
-		if (!sccp_strlen_zero(shortenedNumber) && ((extension_exists = iPbx.extension_status(c) != SCCP_EXTENSION_NOTEXISTS))
+		if (!sccp_strlen_zero(shortenedNumber) && ((extension_exists = iPbx.extension_status(c)) != SCCP_EXTENSION_NOTEXISTS)	/* store the status, not the comparison */
 		    ) {
 			if (pbx_channel && !pbx_check_hangup(pbx_channel)) {
 				/* found an extension, let's dial it */
