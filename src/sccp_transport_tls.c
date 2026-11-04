@@ -53,7 +53,7 @@ static void write_openssl_error_to_log(void)
 	ast_free(buffer);
 }
 
-static void InitializeSSL()
+static void InitializeSSL(void)
 {
 	SSL_load_error_strings();
 	SSL_library_init();
@@ -61,7 +61,7 @@ static void InitializeSSL()
 	SSL_load_error_strings();
 }
 
-static void DestroySSL()
+static void DestroySSL(void)
 {
 	ERR_free_strings();
 	EVP_cleanup();
@@ -73,7 +73,7 @@ static void ShutdownSSL(SSL * ssl)
 	SSL_free(ssl);
 }
 
-static SSL_CTX * create_context()
+static SSL_CTX * create_context(void)
 {
 	sccp_log(DEBUGCAT_SOCKET)(VERBOSE_PREFIX_1 "TLS Transport create context...\n");
 	// const SSL_METHOD * method = TLS_server_method();

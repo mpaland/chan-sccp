@@ -331,40 +331,50 @@ void handle_unknown_message(constSessionPtr no_s, devicePtr no_d, constMessagePt
 }
 
 
-/*
- * Interesting values for Last =
- * 0 Phone Load Is Rejected
- * 1 Phone Load TFTP Size Error
- * 2 Phone Load Compressor Error
- * 3 Phone Load Version Error
- * 4 Disk Full Error
- * 5 Checksum Error
- * 6 Phone Load Not Found in TFTP Server
- * 7 TFTP Timeout
- * 8 TFTP Access Error
- * 9 TFTP Error
- * 10 CCM TCP Connection timeout
- * 11 CCM TCP Connection Close because of bad Ack
- * 12 CCM Resets TCP Connection
- * 13 CCM Aborts TCP Connection
- * 14 CCM TCP Connection Closed
- * 15 CCM TCP Connection Closed because ICMP Unreachable
- * 16 CCM Rejects TCP Connection
- * 17 Keepalive Time Out
- * 18 Fail Back to Primary CCM
- * 20 User Resets Phone By Keypad
- * 21 Phone Resets because IP configuration
- * 22 CCM Resets Phone
- * 23 CCM Restarts Phone
- * 24 CCM Rejects Phone Registration
- * 25 Phone Initializes
- * 26 CCM TCP Connection Closed With Unknown Reason
- * 27 Waiting For State From CCM
- * 28 Waiting For Response From CCM
- * 29 DSP Alarm
- * 30 Phone Abort CCM TCP Connection
- * 31 File Authorization Failed
+/*!
+ * \brief The ReasonForOutOfService a phone reports in its XML alarm (the "Last" value), as text
+ * \note 19 is not assigned
  */
+static const char * sccp_outofservicereason2str(int reason)
+{
+	static const char * const reasons[] = {
+		[0] = "Phone Load Is Rejected",
+		[1] = "Phone Load TFTP Size Error",
+		[2] = "Phone Load Compressor Error",
+		[3] = "Phone Load Version Error",
+		[4] = "Disk Full Error",
+		[5] = "Checksum Error",
+		[6] = "Phone Load Not Found in TFTP Server",
+		[7] = "TFTP Timeout",
+		[8] = "TFTP Access Error",
+		[9] = "TFTP Error",
+		[10] = "CCM TCP Connection timeout",
+		[11] = "CCM TCP Connection Close because of bad Ack",
+		[12] = "CCM Resets TCP Connection",
+		[13] = "CCM Aborts TCP Connection",
+		[14] = "CCM TCP Connection Closed",
+		[15] = "CCM TCP Connection Closed because ICMP Unreachable",
+		[16] = "CCM Rejects TCP Connection",
+		[17] = "Keepalive Time Out",
+		[18] = "Fail Back to Primary CCM",
+		[20] = "User Resets Phone By Keypad",
+		[21] = "Phone Resets because IP configuration",
+		[22] = "CCM Resets Phone",
+		[23] = "CCM Restarts Phone",
+		[24] = "CCM Rejects Phone Registration",
+		[25] = "Phone Initializes",
+		[26] = "CCM TCP Connection Closed With Unknown Reason",
+		[27] = "Waiting For State From CCM",
+		[28] = "Waiting For Response From CCM",
+		[29] = "DSP Alarm",
+		[30] = "Phone Abort CCM TCP Connection",
+		[31] = "File Authorization Failed",
+	};
+	if (reason < 0 || reason >= (int)ARRAY_LEN(reasons) || !reasons[reason]) {
+		return "Unknown";
+	}
+	return reasons[reason];
+}
 
 /*!
  * \brief Handle Alarm
@@ -425,7 +435,7 @@ void handle_XMLAlarmMessage(constSessionPtr s, devicePtr no_d, constMessagePtr m
 			sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_2 "Alarm Type: %s\n", alarmName);
 		}
 		if (sscanf(line, "<Enum name=\"ReasonForOutOfService\">%d</Enum>>", &reasonEnum) == 1) {
-			sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_2 "Reason Enum: %d\n", reasonEnum);
+			sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_2 "Reason Enum: %d (%s)\n", reasonEnum, sccp_outofservicereason2str(reasonEnum));
 		}
 		if (sscanf(line, "<String name=\"LastProtocolEventSent\">%100[^<]</String>", lastProtocolEventSent) == 1) {
 			sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_2 "Last Event Sent: %s\n", lastProtocolEventSent);
@@ -452,7 +462,7 @@ void handle_XMLAlarmMessage(constSessionPtr s, devicePtr no_d, constMessagePtr m
 		 */
 	}
 	if ((GLOB(debug) & DEBUGCAT_MESSAGE) != 0) {								// only show when debugging messages
-		pbx_log(LOG_WARNING, "SCCP XMLAlarm Message: %s(0x%04X) %d bytes length\n", msginfo2str(mid), mid, msg_in->header.length);
+		sccp_log((DEBUGCAT_MESSAGE)) (VERBOSE_PREFIX_3 "SCCP XMLAlarm Message: %s(0x%04X) %d bytes length\n", msginfo2str(mid), mid, msg_in->header.length);	/* a parsed message, not a warning */
 		sccp_dump_msg(msg_in);
 	}
 }
@@ -3765,7 +3775,9 @@ void handle_startMultiMediaTransmissionAck(constSessionPtr s, devicePtr d, const
  */
 void handle_mediaTransmissionFailure(constSessionPtr s, devicePtr d, constMessagePtr msg_in)
 {
-	sccp_dump_msg(msg_in);
+	if ((GLOB(debug) & DEBUGCAT_MESSAGE) != 0) {								// gated like the other dumps
+		sccp_dump_msg(msg_in);
+	}
 	/*
 
 	struct sockaddr_storage ss = { 0 };

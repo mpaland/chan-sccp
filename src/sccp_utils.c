@@ -1603,7 +1603,7 @@ static void __attribute__((destructor)) sccp_unregister_tests(void)
 #			define ucs_debug_bfd_section_flags(_abfd, _section) bfd_section_flags(_section)
 #		endif
 
-void sccp_do_backtrace()
+void sccp_do_backtrace(void)
 {
 	pbx_rwlock_rdlock(&GLOB(lock));
 	boolean_t running = GLOB(module_running);
@@ -1645,7 +1645,7 @@ void sccp_do_backtrace()
 #endif	// HAVE_EXECINFO_H
 }
 #	else
-void sccp_do_backtrace()
+void sccp_do_backtrace(void)
 {
 	// not implemented
 }

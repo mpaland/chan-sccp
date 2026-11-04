@@ -140,7 +140,8 @@ boolean_t sccp_prePBXLoad(void)
 	/* How long to wait for following digits */
 	GLOB(digittimeout) = 8;
 
-	GLOB(debug) = 1;
+	/* GLOB(debug) is not set again here: it is DEBUGCAT_CORE (1) already, set before the threadpool is started, whose
+	 * workers read it in every log macro (the second write was a data race) */
 	GLOB(sccp_tos) = (0x68 & 0xff);										// AF31
 	GLOB(audio_tos) = (0xB8 & 0xff);									// EF
 	GLOB(video_tos) = (0x88 & 0xff);									// AF41

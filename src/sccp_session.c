@@ -527,7 +527,7 @@ static boolean_t sccp_session_removeFromGlobals(sccp_session_t * s)
  *      - socket_lock
  *      - Glob(sessions)
  */
-void sccp_session_terminateAll()
+void sccp_session_terminateAll(void)
 {
 	sccp_session_t *s = NULL;
 	sccp_session_t ** list = NULL;
@@ -583,7 +583,7 @@ static sccp_device_t *__sccp_session_removeDevice(sessionPtr session)
 	sccp_session_lock(session);
 	return_device = session->device;
 	session->device = NULL;
-	sccp_copy_string(session->designator, sccp_netsock_stringify(&session->ourip), sizeof(session->designator));
+	sccp_copy_string(session->designator, sccp_netsock_stringify(&session->sin), sizeof(session->designator));		/* the peer, see sccp_session_set_ourip */
 	sccp_session_unlock(session);
 	if (return_device) {
 		sccp_device_setRegistrationState(return_device, SKINNY_DEVICE_RS_NONE);
@@ -1065,8 +1065,10 @@ static boolean_t sccp_session_set_ourip(sccp_session_t * s)
 	} else {
 		memcpy(&s->ourip, &GLOB(bindaddr), sizeof(s->ourip));
 	}
-	sccp_copy_string(s->designator, sccp_netsock_stringify(&s->ourip), sizeof(s->designator));
-	sccp_log((DEBUGCAT_SOCKET))(VERBOSE_PREFIX_3 "SCCP: Connected on server via %s\n", s->designator);
+	/* the designator prefixes every log line about this session until a device is bound: name the peer, not our own
+	 * listening address (which every unregistered phone shared, exactly when telling them apart matters) */
+	sccp_copy_string(s->designator, sccp_netsock_stringify(&s->sin), sizeof(s->designator));
+	sccp_log((DEBUGCAT_SOCKET))(VERBOSE_PREFIX_3 "SCCP: Connection from %s on server address %s\n", s->designator, sccp_netsock_stringify(&s->ourip));
 	return TRUE;
 }
 
