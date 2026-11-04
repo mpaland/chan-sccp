@@ -547,6 +547,10 @@ SUBDIRS = src doc
 ACLOCAL_AMFLAGS = -I autoconf
 AM_CPPFLAGS = $(LTDLINCL)
 distdir = $(PACKAGE)-$(SCCP_VERSION)_$(SCCP_BRANCH)_r$(SCCP_REVISION)
+
+# Update ChangeLog file from the git log since CHANGELOG_SINCE; a checkout without that tag (shallow clone,
+# a fork without the upstream tags) falls back to the full history instead of failing `make dist`
+CHANGELOG_SINCE = v4.3.5
 XML_chan_sccp_en_US = $(top_srcdir)/src/sccp_appfunctions.c $(top_srcdir)/src/sccp_management.c $(top_srcdir)/src/sccp_cli.c $(top_srcdir)/src/sccp_conference.c $(top_srcdir)/src/sccp_config.c
 all: all-recursive
 
@@ -705,12 +709,6 @@ distdir: $(BUILT_SOURCES)
 	$(MAKE) $(AM_MAKEFLAGS) distdir-am
 
 distdir-am: $(DISTFILES)
-	@case `sed 15q $(srcdir)/NEWS` in \
-	*"$(VERSION)"*) : ;; \
-	*) \
-	  echo "NEWS not updated; not releasing" 1>&2; \
-	  exit 1;; \
-	esac
 	$(am__remove_distdir)
 	$(AM_V_at)$(MKDIR_P) "$(distdir)"
 	@srcdirstrip=`echo "$(srcdir)" | sed 's/[].[^$$\\*]/\\\\&/g'`; \
@@ -1088,10 +1086,12 @@ libtool: 		@LIBTOOL_DEPS@
 			$(SHELL) ./config.status --recheck
 
 FORCE:
-
-# Update ChangeLog file from SVN Log
 ChangeLog:		FORCE
-	@$(GIT) log v4.3.2-gamma...HEAD --pretty=medium >ChangeLog
+	@if $(GIT) rev-parse --verify --quiet $(CHANGELOG_SINCE) >/dev/null 2>&1; then \
+	  $(GIT) log $(CHANGELOG_SINCE)...HEAD --pretty=medium >ChangeLog; \
+	else \
+	  $(GIT) log --pretty=medium >ChangeLog; \
+	fi
 
 # Update ChangeLog Files and Generate Doxygen Documentation
 doxygen: ChangeLog doxygen-doc
@@ -1122,17 +1122,12 @@ rpm:    release
 release:
 	@rm -f ChangeLog
 	@$(MAKE) ChangeLog
-	@if [ "`grep -i $(SCCP_VERSION)_$(SCCP_BRANCH) NEWS`" == "" ]; then \
-	  echo >>NEWS;\
-	  echo "Version: $(SCCP_VERSION)_$(SCCP_BRANCH)" >> NEWS; \
-	  echo "Please edit the NEWS file now..."; \
-	  /usr/bin/joe NEWS; \
-	  /usr/bin/debchange; \
-	  tools/autorevision -o .revision -t m4 2>&1 >/dev/null; \
-	else \
-	  echo "Could not find $(SCCP_VERSION)_$(SCCP_BRANCH) in NEWS file"; \
-	  exit; \
-	fi 
+	@if [ "`grep -i $(SCCP_VERSION)_$(SCCP_BRANCH) NEWS`" = "" ]; then \
+	  echo "Could not find $(SCCP_VERSION)_$(SCCP_BRANCH) in the NEWS file."; \
+	  echo "Add a section for it before releasing."; \
+	  exit 1; \
+	fi
+	@tools/autorevision -o .revision -t m4 >/dev/null 2>&1 || true
 	@$(MAKE) dist-gzip
 
 gen_sccpconf:

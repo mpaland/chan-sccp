@@ -45,7 +45,9 @@ AM_MAINTAINER_MODE([disable])								dnl Switches off auto-regeneration on confi
 											dnl make sure to run tool/bootstrap.sh before checking in configure changes to svn
 
 dnl AM_INIT_AUTOMAKE([1.14 -Wno-portability check-news dist-bzip2 nostdinc subdir-objects])
-AM_INIT_AUTOMAKE([1.10 -Wno-portability check-news dist-bzip2 nostdinc subdir-objects foreign])
+dnl check-news is not used: it makes `make dist` grep NEWS for $(VERSION), which carries the branch name, so a
+dnl distribution could only be built from a branch written into NEWS by hand. The release target checks NEWS itself.
+AM_INIT_AUTOMAKE([1.10 -Wno-portability dist-bzip2 nostdinc subdir-objects foreign])
 m4_ifdef([AM_SILENT_RULES],[AM_SILENT_RULES([yes])])
 AC_DISABLE_STATIC([])
 

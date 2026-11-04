@@ -21,9 +21,15 @@ libtool: 		@LIBTOOL_DEPS@
 	
 FORCE:
 
-# Update ChangeLog file from SVN Log
+# Update ChangeLog file from the git log since CHANGELOG_SINCE; a checkout without that tag (shallow clone,
+# a fork without the upstream tags) falls back to the full history instead of failing `make dist`
+CHANGELOG_SINCE		= v4.3.5
 ChangeLog:		FORCE
-	@$(GIT) log v4.3.2-gamma...HEAD --pretty=medium >ChangeLog
+	@if $(GIT) rev-parse --verify --quiet $(CHANGELOG_SINCE) >/dev/null 2>&1; then \
+	  $(GIT) log $(CHANGELOG_SINCE)...HEAD --pretty=medium >ChangeLog; \
+	else \
+	  $(GIT) log --pretty=medium >ChangeLog; \
+	fi
 
 # Update ChangeLog Files and Generate Doxygen Documentation
 doxygen: ChangeLog doxygen-doc
@@ -57,17 +63,12 @@ endif
 release:
 	@rm -f ChangeLog
 	@$(MAKE) ChangeLog
-	@if [ "`grep -i $(SCCP_VERSION)_$(SCCP_BRANCH) NEWS`" == "" ]; then \
-	  echo >>NEWS;\
-	  echo "Version: $(SCCP_VERSION)_$(SCCP_BRANCH)" >> NEWS; \
-	  echo "Please edit the NEWS file now..."; \
-	  /usr/bin/joe NEWS; \
-	  /usr/bin/debchange; \
-	  tools/autorevision -o .revision -t m4 2>&1 >/dev/null; \
-	else \
-	  echo "Could not find $(SCCP_VERSION)_$(SCCP_BRANCH) in NEWS file"; \
-	  exit; \
-	fi 
+	@if [ "`grep -i $(SCCP_VERSION)_$(SCCP_BRANCH) NEWS`" = "" ]; then \
+	  echo "Could not find $(SCCP_VERSION)_$(SCCP_BRANCH) in the NEWS file."; \
+	  echo "Add a section for it before releasing."; \
+	  exit 1; \
+	fi
+	@tools/autorevision -o .revision -t m4 >/dev/null 2>&1 || true
 	@$(MAKE) dist-gzip
 
 gen_sccpconf:

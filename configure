@@ -8208,6 +8208,7 @@ fi
   cd $BASE >/dev/null
   . ./tools/versioncheck silent
   cd $CURRENT >/dev/null
+      SCCP_BRANCH="`echo "${SCCP_BRANCH}" | sed -e 's/[^A-Za-z0-9._+-]/_/g'`"
 
 
 printf "%s\n" "#define SCCP_VERSION \"${SCCP_VERSION}\"" >>confdefs.h
