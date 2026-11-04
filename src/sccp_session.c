@@ -379,10 +379,10 @@ static gcc_inline int session_buffer2msg(sccp_session_t * s, const unsigned char
 	// dissect the message header
 	int lenAccordingToOurProtocolSpec = session_dissect_header(s, &msg_header, &msginfo);
 	if (dont_expect(lenAccordingToOurProtocolSpec < 0)) {
-		if (lenAccordingToOurProtocolSpec == -2) {
-			return 0;
-		}
-		lenAccordingToOurProtocolSpec = 0;									// unknown message, read it and discard content completely
+		/* rejected header (unknown message id or protocol version, impossible size), already logged by
+		 * session_dissect_header: discard it. Dispatching it with a zeroed length would hand on a zeroed header,
+		 * which is messageId 0 (KeepAlive): the phone got a KeepAliveAck for whatever it sent. */
+		return 0;
 	}
 	if (dont_expect(lenAccordingToPacketHeader > lenAccordingToOurProtocolSpec)) {					// show out discarded bytes
 		pbx_log(LOG_WARNING, "%s: (session_dissect_msg) Incoming message is bigger(%d) than known size(%d). Packet looks like!\n", DEV_ID_LOG(s->device), lenAccordingToPacketHeader, lenAccordingToOurProtocolSpec);
@@ -417,14 +417,15 @@ static gcc_inline int process_buffer(sccp_session_t * s, sccp_msg_t * msg, unsig
 		uint32_t header_len;
 		memcpy(&header_len, buffer, 4);
 		uint32_t payload_len = letohl(header_len) + (SCCP_PACKET_HEADER - 4);
-		if (*len < payload_len) {
-			break;												// Too short - haven't received whole payload yet, go poll for more
-		}
-
+		/* check the announced size before waiting for the rest of it: an impossible size would otherwise
+		 * have us poll for more until the receive buffer is full */
 		if (dont_expect(payload_len < SCCP_PACKET_HEADER || payload_len > SCCP_MAX_PACKET)) {
 			pbx_log(LOG_ERROR, "%s: (process_buffer) Size of the data payload in the packet is bigger than max packet, close connection !\n", DEV_ID_LOG(s->device));
 			res = -1;
 			break;
+		}
+		if (*len < payload_len) {
+			break;												// Too short - haven't received whole payload yet, go poll for more
 		}
 		if (dont_expect(session_buffer2msg(s, buffer, payload_len, msg) != 0)) {
 			res = -2;
@@ -898,7 +899,9 @@ void *sccp_session_device_thread(void *session)
 						socket_get_error(s, __FILE__, __LINE__, __PRETTY_FUNCTION__);
 						break;
 					}
-				} else if (!((recv_len += result) && ((ARRAY_LEN(recv_buffer) * sizeof(unsigned char)) - recv_len) && process_buffer(s, &msg, recv_buffer, &recv_len) == 0)) {
+				/* judge by what process_buffer says: a "room left" test before draining the buffer treated a read
+				 * that filled it exactly as unparseable and reset the phone (a full buffer holds at least one packet) */
+				} else if (!((recv_len += result) && process_buffer(s, &msg, recv_buffer, &recv_len) == 0)) {
 					pbx_log(LOG_ERROR, "%s: (netsock_device_thread) Received a packet or message (with result:%d) which we could not handle, giving up session: %p!\n", s->designator, result, s);
 					sccp_dump_msg(&msg);
 					if (s->device) {
