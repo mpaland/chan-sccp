@@ -142,6 +142,18 @@ static int sccp_feat_perform_pickup(constDevicePtr d, channelPtr c, PBX_CHANNEL_
 		iPbx.get_callerid_number(target, &target_number);
 	}
 
+	/* the channel we pick up with carries no calling party of its own (on a directed pickup it is the one the pickup
+	 * code was dialled on): read the caller off the SCCP call we take over, before ast_do_pickup() masquerades it */
+	char picked_calling_name[StationMaxNameSize] = { 0 };
+	char picked_calling_number[StationMaxDirnumSize] = { 0 };
+	{
+		AUTO_RELEASE(sccp_channel_t, target_channel, get_sccp_channel_from_pbx_channel(target));
+		if (target_channel) {
+			iCallInfo.Getter(sccp_channel_getCallInfo(target_channel), SCCP_CALLINFO_CALLINGPARTY_NAME, &picked_calling_name, SCCP_CALLINFO_CALLINGPARTY_NUMBER, &picked_calling_number,
+					 SCCP_CALLINFO_KEY_SENTINEL);
+		}
+	}
+
 	sccp_channel_stop_schedule_digittimout(c);
 	c->calltype = SKINNY_CALLTYPE_INBOUND;                                        // reset call direction
 	c->state = SCCP_CHANNELSTATE_RINGING;
@@ -195,6 +207,8 @@ static int sccp_feat_perform_pickup(constDevicePtr d, channelPtr c, PBX_CHANNEL_
 
 		callinfo_orig = sccp_channel_getCallInfo(c);
 		iCallInfo.Setter(callinfo_orig,                                                                      // update calling end
+				 SCCP_CALLINFO_CALLINGPARTY_NAME, sccp_strlen_zero(picked_calling_name) ? NULL : picked_calling_name,                   // who is calling us
+				 SCCP_CALLINFO_CALLINGPARTY_NUMBER, sccp_strlen_zero(picked_calling_number) ? NULL : picked_calling_number,
 				 SCCP_CALLINFO_CALLEDPARTY_NAME, called_name,                                        // channel picking up
 				 SCCP_CALLINFO_CALLEDPARTY_NUMBER, called_number, SCCP_CALLINFO_ORIG_CALLEDPARTY_NAME, target_name, SCCP_CALLINFO_ORIG_CALLEDPARTY_NUMBER, target_number,
 				 SCCP_CALLINFO_ORIG_CALLEDPARTY_REDIRECT_REASON, 5, SCCP_CALLINFO_LAST_REDIRECTINGPARTY_NAME, called_name, SCCP_CALLINFO_LAST_REDIRECTINGPARTY_NUMBER, called_number,
@@ -211,7 +225,11 @@ static int sccp_feat_perform_pickup(constDevicePtr d, channelPtr c, PBX_CHANNEL_
 			sccp_event_fire(event);
 		}
 		sccp_log((DEBUGCAT_FEATURE))(VERBOSE_PREFIX_3 "%s: (perform_pickup) channel:%s, modeanser: %s\n", DEV_ID_LOG(d), c->designator, answer ? "yes" : "no");
-		if(answer) {
+		/* the picked up call may already be gone again (its owner reacting to the masquerade hung it up, which sent the
+		 * phone on-hook for this callid): re-creating it on the phone would leave a dead call window */
+		if (c->isHangingUp || (c->owner && pbx_check_hangup_locked(c->owner))) {
+			pbx_log(LOG_NOTICE, "%s: (perform_pickup) picked up call %s was hung up during the pickup, not answering it\n", DEV_ID_LOG(d), c->designator);
+		} else if(answer) {
 			/* emulate previous indications, before signalling connected */
 			sccp_device_sendcallstate(d, lineInstance, c->callid, SKINNY_CALLSTATE_RINGIN, SKINNY_CALLPRIORITY_LOW, SKINNY_CALLINFO_VISIBILITY_DEFAULT);
 			sccp_device_sendcallstate(d, lineInstance, c->callid, SKINNY_CALLSTATE_OFFHOOK, SKINNY_CALLPRIORITY_LOW, SKINNY_CALLINFO_VISIBILITY_DEFAULT);
@@ -1269,9 +1287,9 @@ int sccp_feat_sharedline_barge(constLineDevicePtr bargingLD, channelPtr bargedCh
 			// hide the channel we barged into
 			d->indicate->remoteConnected(d, lineInstance, bargedChannel->callid, SKINNY_CALLINFO_VISIBILITY_HIDDEN);
 
-			// display prompt on Barged Device
+			// display prompt on Barged Device (d is the barging one: it was told it barged itself)
 			snprintf(statusmsg, sizeof(statusmsg), SKINNY_DISP_BARGE " " SKINNY_DISP_FROM " %s", l->cid_num);
-			sccp_dev_set_message(d, statusmsg, SCCP_DISPLAYSTATUS_TIMEOUT, FALSE, FALSE);
+			sccp_dev_set_message(bargedLineDevice->device, statusmsg, SCCP_DISPLAYSTATUS_TIMEOUT, FALSE, FALSE);
 			bargedChannel->setTone(bargedChannel, SKINNY_TONE_ZIP, SKINNY_TONEDIRECTION_BOTH);
 
 			sccp_log(DEBUGCAT_FEATURE)(VERBOSE_PREFIX_2 "%s: is barged in on:%s\n", c->designator, bargedChannel->designator);
@@ -1453,25 +1471,23 @@ void sccp_feat_monitor(constDevicePtr device, constLinePtr no_line, uint32_t no_
 		constChannelPtr channel = maybe_channel;
 		pbx_str_t *amiCommandStr = pbx_str_alloca(DEFAULT_PBX_STR_BUFFERSIZE);
 		char * outStr = NULL;
+		/* MixMonitor (app_mixmonitor), not Monitor: res_monitor, behind the Monitor/StopMonitor actions, was removed
+		 * in Asterisk 21, where Record could only ever report "Recording failed". MixMonitor mixes both directions by
+		 * default; the format follows the file extension. */
 		if (!(monitorFeature->status & SCCP_FEATURE_MONITOR_STATE_ACTIVE)) {
-			pbx_str_append(&amiCommandStr,0 ,"Action: Monitor\r\n");
+			pbx_str_append(&amiCommandStr,0 ,"Action: MixMonitor\r\n");
 			pbx_str_append(&amiCommandStr,0 ,"Channel: %s\r\n", pbx_channel_name(channel->owner));
 			pbx_str_append(&amiCommandStr,0 ,"File: mixmonitor-%s-%d_%s.wav\r\n", channel->line->name, channel->callid, iPbx.getChannelUniqueID(channel));
-			pbx_str_append(&amiCommandStr,0 ,"Format: wav\r\n");
-			pbx_str_append(&amiCommandStr,0 ,"Mix: true\r\n");
 			pbx_str_append(&amiCommandStr,0 ,"\r\n");
 			//monitorFeature->status &= ~SCCP_FEATURE_MONITOR_STATE_ACTIVE;					/* no need to change status, will be done by sccp_asterisk_managerHookHelper */
 		} else {
-			pbx_str_append(&amiCommandStr,0 ,"Action: StopMonitor\r\n");
+			pbx_str_append(&amiCommandStr,0 ,"Action: StopMixMonitor\r\n");
 			pbx_str_append(&amiCommandStr,0 ,"Channel: %s\r\n", pbx_channel_name(channel->owner));
 			pbx_str_append(&amiCommandStr,0 ,"\r\n");
 			//monitorFeature->status |= SCCP_FEATURE_MONITOR_STATE_ACTIVE;
 		}
 		if (sccp_manager_action2str(pbx_str_buffer(amiCommandStr), &outStr) && outStr) {
-			if (	
-				sccp_strequals(outStr, "Response: Success\r\nMessage: Started monitoring channel\r\n\r\n") ||
-				sccp_strequals(outStr, "Response: Success\r\nMessage: Stopped monitoring channel\r\n\r\n")
-			) {
+			if (strstr(outStr, "Response: Success") != NULL) {						/* judged by the response line, not by res_monitor's wording */
 				sccp_log((DEBUGCAT_FEATURE)) (VERBOSE_PREFIX_3 "%s: (sccp_feat_monitor) AMI monitor request sent successfully.\n", DEV_ID_LOG(device));
 				// sccp_asterisk_managerHookHelper will catch the result and update the softkey / featureButton accordingly.
 			} else {

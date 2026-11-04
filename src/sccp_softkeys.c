@@ -120,8 +120,10 @@ static void sccp_sk_dial(const sccp_softkeyMap_cb_t * const softkeyMap_cb, const
 {
 	sccp_log((DEBUGCAT_SOFTKEY)) (VERBOSE_PREFIX_3 "%s: SoftKey Dial Pressed\n", DEV_ID_LOG(d));
 	if (c && !iPbx.getChannelPbx(c)) {									// Prevent dialling if in an inappropriate state.
-		/* Only handle this in DIALING state. AFAIK GETDIGITS is used only for call forward and related input functions. (-DD) */
-		if (c->state == SCCP_CHANNELSTATE_DIGITSFOLL || c->softswitch_action == SCCP_SOFTSWITCH_GETFORWARDEXTEN) {
+		/* Submit the collected number: DIGITSFOLL is normal dialling; the number catching features (call forward,
+		 * pickup, meetme, barge, conference room) leave their softswitch action pending on a channel that is back in
+		 * OFFHOOK by then. Dial used to complete only call forward; the others needed '#' or the digit timeout. */
+		if (c->state == SCCP_CHANNELSTATE_DIGITSFOLL || (c->softswitch_action != SCCP_SOFTSWITCH_DIAL && c->softswitch_action != SCCP_SOFTSWITCH_ENDCALLFORWARD)) {
 			sccp_pbx_softswitch(c);
 		}
 	}
@@ -192,7 +194,7 @@ static void sccp_sk_redial(const sccp_softkeyMap_cb_t * const softkeyMap_cb, con
 		return;
 	}
 	AUTO_RELEASE(const sccp_line_t, line,
-		     d->redialInformation.lineInstance == 0 ? sccp_line_find_byid(d, d->redialInformation.lineInstance) : sccp_sk_get_retained_line(d, l, lineInstance, c, SKINNY_DISP_NO_LINE_AVAILABLE));
+		     d->redialInformation.lineInstance != 0 ? sccp_line_find_byid(d, d->redialInformation.lineInstance) : sccp_sk_get_retained_line(d, l, lineInstance, c, SKINNY_DISP_NO_LINE_AVAILABLE));	/* the line of the last number, when known */
 	if(!line) {
 		line = sccp_sk_get_retained_line(d, l, lineInstance, c, SKINNY_DISP_NO_LINE_AVAILABLE) /*ref_replace*/;
 	}
@@ -210,7 +212,7 @@ static void sccp_sk_redial(const sccp_softkeyMap_cb_t * const softkeyMap_cb, con
 static void sccp_sk_newcall(const sccp_softkeyMap_cb_t * const softkeyMap_cb, constDevicePtr d, constLinePtr l, const uint32_t lineInstance, channelPtr c)
 {
 	char *adhocNumber = NULL;
-	sccp_speed_t k;
+	sccp_speed_t k = {0};
 	AUTO_RELEASE(const sccp_line_t, line , sccp_sk_get_retained_line(d, l, lineInstance, c, SKINNY_DISP_NO_LINE_AVAILABLE));
 	if (!line) {
 		return;
@@ -235,7 +237,7 @@ static void sccp_sk_newcall(const sccp_softkeyMap_cb_t * const softkeyMap_cb, co
 	 */
 	if(!adhocNumber) {
 		AUTO_RELEASE(sccp_channel_t, activeChannel, sccp_device_getActiveChannel(d));
-		if(activeChannel && activeChannel->line != l && sccp_strlen(activeChannel->dialedNumber) == 0) {
+		if(activeChannel && activeChannel->line != line && sccp_strlen(activeChannel->dialedNumber) == 0) {		/* the line resolved above, l may be NULL */
 			sccp_channel_endcall(activeChannel);
 		}
 	}
@@ -1093,7 +1095,7 @@ void sccp_softkey_clear(void)
 		}
 		if (k->softkeyCbMap) {
 			for (i = 0; i < ARRAY_LEN(softkeyCbMap); i++) {
-				if (!sccp_strlen_zero(k->softkeyCbMap[i].uriactionstr)) {
+				if (k->softkeyCbMap[i].uriactionstr) {						/* empty strings are allocated too */
 					sccp_free(k->softkeyCbMap[i].uriactionstr);
 				}
 			}
