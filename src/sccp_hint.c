@@ -526,10 +526,27 @@ static void sccp_hint_addSubscription4Device(const sccp_device_t * device, const
 	subscriber->positionOnDevice = positionOnDevice;
 
 	// Copy devicetype from buttonTemplate, for use in sccp_hint_notifySubscribers
-	int i = 0;
-	for (i = 0; i < StationMaxButtonTemplateSize; i++) {
-		if (device->buttonTemplate[i].instance == instance) {
+	// Line and speeddial instances are separate numbering spaces that both start at 1: match the button type that
+	// carries this hinted speeddial (BLF speeddial, or a line button on phones without dynamic speeddials) and stop
+	// at the first hit. Matching the number alone let a line or addon button with the same number win.
+	if (device->buttonTemplate) {
+		int i = 0;
+		int lineMatch = -1;
+		for (i = 0; i < StationMaxButtonTemplateSize; i++) {
+			if (device->buttonTemplate[i].instance != instance) {
+				continue;
+			}
+			if (device->buttonTemplate[i].type == SKINNY_BUTTONTYPE_BLFSPEEDDIAL) {
+				break;
+			}
+			if (lineMatch < 0 && device->buttonTemplate[i].type == SKINNY_BUTTONTYPE_LINE) {
+				lineMatch = i;
+			}
+		}
+		if (i < StationMaxButtonTemplateSize) {
 			subscriber->devicetype = device->buttonTemplate[i].devicetype;
+		} else if (lineMatch >= 0) {
+			subscriber->devicetype = device->buttonTemplate[lineMatch].devicetype;
 		}
 	}
 
@@ -717,7 +734,7 @@ static void sccp_hint_updateLineState(struct sccp_hint_lineState * lineState, sc
 			sccp_copy_string(lineState->callInfo.partyName, SKINNY_DISP_TEMP_FAIL, sizeof(lineState->callInfo.partyName));
 			sccp_log((DEBUGCAT_HINT)) (VERBOSE_PREFIX_4 "SCCP: (sccp_hint_updateLineState) 0 devices register on linename: %s\n", line->name);
 
-		} else if (SCCP_LIST_GETSIZE(&line->channels) > 1) {
+		} else if (SCCP_LIST_GETSIZE(&line->channels) > 1 && SCCP_LIST_GETSIZE(&line->devices) > 1) {	/* shared and busy: a transfer on an unshared line has two channels too */
 			/* line is currently shared between multiple device and has multiple concurrent calls active */
 			sccp_hint_updateLineStateForMultipleChannels(lineState, state);
 		} else {
@@ -1140,10 +1157,12 @@ static void sccp_hint_notifySubscribers(sccp_hint_list_t * hint)
 				*/
 				REQ(msg, FeatureStatDynamicMessage);
 				if (!msg) {
-					return;
+					break;									/* not return: the subscriber list is locked above and unlocked after the loop */
 				}
 				sccp_copy_string(msg->data.FeatureStatDynamicMessage.textLabel, displayMessage, sizeof(msg->data.FeatureStatDynamicMessage.textLabel));
-				msg->data.FeatureStatDynamicMessage.textLabel[strlen(displayMessage) - 1] = '\0';
+				if (displayMessage[0]) {							/* an empty label wrapped to textLabel[-1] */
+					msg->data.FeatureStatDynamicMessage.textLabel[strlen(displayMessage) - 1] = '\0';
+				}
 				msg->data.FeatureStatDynamicMessage.lel_lineInstance                      = htolel(subscriber->instance);
 				msg->data.FeatureStatDynamicMessage.lel_buttonType                        = htolel(SKINNY_BUTTONTYPE_BLFSPEEDDIAL);
 				msg->data.FeatureStatDynamicMessage.stateVal.lel_uint32                   = htolel(status);
@@ -1153,7 +1172,7 @@ static void sccp_hint_notifySubscribers(sccp_hint_list_t * hint)
 				 * Send the actual message we wanted to send */
 				REQ(msg, FeatureStatDynamicMessage);
 				if (!msg) {
-					return;
+					break;									/* not return: the subscriber list is still locked */
 				}
 				sccp_copy_string(msg->data.FeatureStatDynamicMessage.textLabel, displayMessage, sizeof(msg->data.FeatureStatDynamicMessage.textLabel));
 				msg->data.FeatureStatDynamicMessage.lel_lineInstance    = htolel(subscriber->instance);

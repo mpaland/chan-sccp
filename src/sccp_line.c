@@ -187,7 +187,12 @@ void sccp_line_removeFromGlobals(sccp_line_t * line)
 	sccp_line_t *removed_line = NULL;
 	if (line) {
 		SCCP_RWLIST_WRLOCK(&GLOB(lines));
-		removed_line = SCCP_RWLIST_REMOVE(&GLOB(lines), line, list);
+		/* SCCP_LIST_REMOVE hands back the element whether it was linked or not: releasing a non-member drops a
+		 * reference the list never held. Reached twice on realtime lines (sccp_line_clean -> linedevice_remove ->
+		 * realtime cleaner -> sccp_line_clean). A linked element is the head or has a predecessor. */
+		if (GLOB(lines).first == line || line->list.prev != NULL) {
+			removed_line = SCCP_RWLIST_REMOVE(&GLOB(lines), line, list);
+		}
 		SCCP_RWLIST_UNLOCK(&GLOB(lines));
 
 		if (removed_line) {
@@ -217,9 +222,8 @@ void *sccp_create_hotline(void)
 
 	AUTO_RELEASE(sccp_line_t, hotline , sccp_line_create("Hotline"));
 	if (hotline) {
-#ifdef CS_SCCP_REALTIME
-		hotline->realtime = TRUE;
-#endif
+		/* not realtime: the realtime auto-cleaner in sccp_linedevice_remove() tore this global line down (and
+		 * dropped it from the globals) whenever its last device detached, e.g. on every reload */
 		hotline->label = pbx_strdup("Hotline");
 		hotline->context = pbx_strdup("default");
 		sccp_copy_string(hotline->cid_name, "hotline", sizeof(hotline->cid_name));
@@ -432,14 +436,14 @@ void sccp_line_updatePreferencesFromDevicesToLine(sccp_line_t * l)
 					// zero matching codecs we have to combine
 					sccp_codec_combineSets(l->preferences.audio, ld->device->preferences.audio);
 				} else {
-					memcpy(&l->preferences.audio, &temp, sizeof *temp);
+					memcpy(&l->preferences.audio, &temp, sizeof(temp));		/* the whole set, sizeof *temp is one codec */
 				}
-				memset(&temp, SKINNY_CODEC_NONE, sizeof *temp);
+				memset(&temp, SKINNY_CODEC_NONE, sizeof(temp));
 				if(sccp_codec_getReducedSet(l->preferences.video, ld->device->preferences.video, temp) == 0) {
 					// zero matching codecs we have to combine
 					sccp_codec_combineSets(l->preferences.video, ld->device->preferences.video);
 				} else {
-					memcpy(&l->preferences.video, &temp, sizeof *temp);
+					memcpy(&l->preferences.video, &temp, sizeof(temp));
 				}
 			}
 		}
@@ -788,7 +792,7 @@ linePtr sccp_line_find_byButtonIndex(constDevicePtr d, uint16_t buttonIndex)
 
 	sccp_log((DEBUGCAT_LINE + DEBUGCAT_DEVICE)) (VERBOSE_PREFIX_3 "%s: Looking for line with buttonIndex %d.\n", DEV_ID_LOG(d), buttonIndex);
 	
-	if (buttonIndex > 0 && buttonIndex < StationMaxButtonTemplateSize && d->buttonTemplate[buttonIndex - 1].type == SKINNY_BUTTONTYPE_LINE && d->buttonTemplate[buttonIndex - 1].ptr ) {
+	if (d->buttonTemplate && buttonIndex > 0 && buttonIndex < StationMaxButtonTemplateSize && d->buttonTemplate[buttonIndex - 1].type == SKINNY_BUTTONTYPE_LINE && d->buttonTemplate[buttonIndex - 1].ptr ) {	/* NULL before the template request */
 #if DEBUG
 		l = (sccp_line_t *)sccp_refcount_retain(d->buttonTemplate[buttonIndex - 1].ptr, filename, lineno, func);
 #else

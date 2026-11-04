@@ -1141,9 +1141,13 @@ static btnlist *sccp_make_button_template(devicePtr d)
 					if ((btn[i].type == SCCP_BUTTONTYPE_MULTI || btn[i].type == SCCP_BUTTONTYPE_SPEEDDIAL)) {
 
 //						buttonconfig->instance = btn[i].instance = i + 1;
+						/* record whether the hint is honoured on this device: a template without multi-purpose
+						 * slots (every older model) places a hinted speeddial as an ordinary one, and the
+						 * ordinary lookup has to find it (an empty button was sent, upstream #566) */
 						if (!sccp_strlen_zero(buttonconfig->button.speeddial.hint)
 						    && btn[i].type == SCCP_BUTTONTYPE_MULTI				/* we can set our feature */
 						    ) {
+							buttonconfig->button.speeddial.hintActive = TRUE;
 #ifdef CS_DYNAMIC_SPEEDDIAL
 							if (d->inuseprotocolversion >= 15) {
 								btn[i].type = SKINNY_BUTTONTYPE_BLFSPEEDDIAL;
@@ -1155,11 +1159,13 @@ static btnlist *sccp_make_button_template(devicePtr d)
 								buttonconfig->instance = btn[i].instance = lineInstance++;
 							}
 						} else {
+							buttonconfig->button.speeddial.hintActive = FALSE;
 							btn[i].type = SKINNY_BUTTONTYPE_SPEEDDIAL;
 							buttonconfig->instance = btn[i].instance = speeddialInstance++;
 
 						}
 					} else if (btn[i].type == SCCP_BUTTONTYPE_ABBRDIAL) {
+						buttonconfig->button.speeddial.hintActive = FALSE;
 						btn[i].type = SKINNY_BUTTONTYPE_SPEEDDIAL;
 						buttonconfig->instance = btn[i].instance = speeddialInstance++;
 	 					//sccp_log(DEBUGCAT_CORE)(VERBOSE_PREFIX_2 "%s: Assigned Speeddial %d to AbbrDial %d\n", d->id, i, buttonconfig->instance);
@@ -1320,7 +1326,9 @@ static btnlist *sccp_make_button_template(devicePtr d)
 
 	// all non defined buttons are set to UNUSED
 	for (i = 0; i < StationMaxButtonTemplateSize; i++) {
-		if (btn[i].type == SCCP_BUTTONTYPE_MULTI || btn[i].type == SCCP_BUTTONTYPE_ABBRDIAL) {
+		/* every SCCP_BUTTONTYPE_ value is an internal placeholder the response passes through unchanged: an unclaimed
+		 * speeddial or hint slot was announced as button type 0xF3/0xF4 (a known cause of phones rebooting) */
+		if (btn[i].type == SCCP_BUTTONTYPE_MULTI || btn[i].type == SCCP_BUTTONTYPE_ABBRDIAL || btn[i].type == SCCP_BUTTONTYPE_SPEEDDIAL || btn[i].type == SCCP_BUTTONTYPE_HINT) {
 			btn[i].type = SKINNY_BUTTONTYPE_UNUSED;
 		}
 	}
@@ -1524,7 +1532,7 @@ void sccp_handle_button_template_req(constSessionPtr s, devicePtr d, constMessag
 	msg_out->data.ButtonTemplateMessage.lel_totalButtonCount = htolel(lastUsedButtonPosition + 1);
 
 	/* set speeddial for older devices like 7912 */
-	uint32_t speeddialInstance = 0;
+	uint32_t speeddialInstance = SCCP_FIRST_SPEEDDIALINSTANCE;		/* 0 marks an unplaced button and is rejected by the speeddial lookup */
 	sccp_buttonconfig_t * config = NULL;
 
 	sccp_log((DEBUGCAT_BUTTONTEMPLATE + DEBUGCAT_SPEEDDIAL))(VERBOSE_PREFIX_3 "%s: configure unconfigured speeddialbuttons \n", d->id);
@@ -1578,7 +1586,7 @@ void handle_line_number(constSessionPtr s, devicePtr d, constMessagePtr msg_in)
 		fullyQualifiedDisplayName = dirNumber = k.name;
 	}
 
-	char displayName[SCCP_MAX_LABEL + 1];
+	char displayName[SCCP_MAX_LABEL + 1] = "";							/* not every branch below writes it */
 	if (l) {
 		SCCP_LIST_LOCK(&d->buttonconfig);
 		SCCP_LIST_TRAVERSE(&d->buttonconfig, config, list) {
