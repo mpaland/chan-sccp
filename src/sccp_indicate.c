@@ -533,6 +533,16 @@ static void __sccp_indicate_remote_device(constDevicePtr device, channelPtr c, l
 					remoteDevice->indicate->remoteOnhook(remoteDevice, lineInstance, callid);
 					break;
 
+				case SCCP_CHANNELSTATE_OFFHOOK:
+					/* tell the other appearances that the shared line was seized: OFFHOOK passed the filter in
+					 * sccp_indicate() but fell to the default here, so they showed the line free until the call was
+					 * answered, and someone could take it at that moment */
+					sccp_log(DEBUGCAT_INDICATE) (VERBOSE_PREFIX_3 "%s -> %s: indicate remote offhook (lineInstance: %d, callid: %d)\n", DEV_ID_LOG(device), DEV_ID_LOG(remoteDevice), lineInstance, c->callid);
+					if (remoteDevice->indicate->remoteOffhook) {
+						remoteDevice->indicate->remoteOffhook(remoteDevice, lineInstance, callid);
+					}
+					break;
+
 				case SCCP_CHANNELSTATE_CONNECTEDCONFERENCE:
 				case SCCP_CHANNELSTATE_CONNECTED:
 					sccp_log(DEBUGCAT_INDICATE) (VERBOSE_PREFIX_3 "%s -> %s: indicate remote connected (lineInstance: %d, callid: %d %s)\n", DEV_ID_LOG(device), DEV_ID_LOG(remoteDevice), lineInstance, c->callid, c->answered_elsewhere ? ", answered elsewhere" : "");

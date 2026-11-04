@@ -1241,10 +1241,16 @@ int sccp_feat_sharedline_barge(constLineDevicePtr bargingLD, channelPtr bargedCh
 		sccp_dev_displayprompt(d, lineInstance, 0, SKINNY_DISP_ANOTHER_BARGE_EXISTS, SCCP_DISPLAYSTATUS_TIMEOUT);
 		return FALSE;
 	}
+	/* only a connected call can be barged into (a shared line is now also shown as in use while still being dialled) */
+	if (bargedChannel->state != SCCP_CHANNELSTATE_CONNECTED && bargedChannel->state != SCCP_CHANNELSTATE_CONNECTEDCONFERENCE) {
+		sccp_dev_displayprompt(d, lineInstance, 0, SKINNY_DISP_FAILED_TO_SETUP_BARGE, SCCP_DISPLAYSTATUS_TIMEOUT);
+		return FALSE;
+	}
 	bargedChannel->isBarged = TRUE;
 
 	AUTO_RELEASE(sccp_linedevice_t, bargedLineDevice, bargedChannel->getLineDevice(bargedChannel));
 	if (!bargedLineDevice || !bargedLineDevice->device) {
+		bargedChannel->isBarged = FALSE;								/* left set, every later barge was refused as "another barge exists" */
 		sccp_dev_displayprompt(d, lineInstance, 0, SKINNY_DISP_FAILED_TO_SETUP_BARGE, SCCP_DISPLAYSTATUS_TIMEOUT);
 		return FALSE;
 	}
@@ -1299,9 +1305,14 @@ int sccp_feat_sharedline_barge(constLineDevicePtr bargingLD, channelPtr bargedCh
 		} else {
 			pbx_log(LOG_ERROR, "Failed to automatically find or create "
 				"context '%s' for sccp_barge!\n", context);
+			bargedChannel->isBarged = FALSE;
 			sccp_dev_displayprompt(d, lineInstance, 0, SKINNY_DISP_FAILED_TO_SETUP_BARGE, SCCP_DISPLAYSTATUS_TIMEOUT);
 			return FALSE;
 		}
+	} else {
+		bargedChannel->isBarged = FALSE;								/* no channel to barge with */
+		sccp_dev_displayprompt(d, lineInstance, 0, SKINNY_DISP_FAILED_TO_SETUP_BARGE, SCCP_DISPLAYSTATUS_TIMEOUT);
+		return FALSE;
 	}
 	return TRUE;
 }

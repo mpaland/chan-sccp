@@ -3103,8 +3103,13 @@ static void sccp_device_indicate_onhook_remote(constDevicePtr device, const uint
 
 static void sccp_device_indicate_offhook_remote(constDevicePtr device, const uint8_t lineInstance, const uint32_t callid)
 {
-	sccp_device_sendcallstate(device, lineInstance, callid, SKINNY_CALLSTATE_OFFHOOK, SKINNY_CALLPRIORITY_LOW, SKINNY_CALLINFO_VISIBILITY_DEFAULT);
-	sccp_dev_set_keyset(device, lineInstance, callid, KEYMODE_OFFHOOK);
+	/* another phone seized a line this one shares: show the line as in use elsewhere (lamp and call state, as for a
+	 * connected remote call). The offhook keyset put an End Call key on a phone that has no part in the call. The
+	 * idle keyset rather than the stealable one: barge and intercept only make sense once the call is connected,
+	 * which sccp_device_indicate_connected_remote switches to. */
+	sccp_device_setLamp(device, SKINNY_STIMULUS_LINE, lineInstance, SKINNY_LAMP_ON);
+	sccp_device_sendcallstate(device, lineInstance, callid, SKINNY_CALLSTATE_CALLREMOTEMULTILINE, SKINNY_CALLPRIORITY_LOW, SKINNY_CALLINFO_VISIBILITY_DEFAULT);
+	sccp_dev_set_keyset(device, lineInstance, callid, KEYMODE_ONHOOK);
 }
 
 
