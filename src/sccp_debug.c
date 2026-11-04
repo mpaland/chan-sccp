@@ -80,26 +80,22 @@ int32_t sccp_parse_debugline(char * arguments[], int startat, int argc, int32_t 
 				new_debug_value = 0;
 				for (i = 0; i < ARRAY_LEN(sccp_debug_categories); i++) {
 					if (!subtract) {
-						new_debug_value += sccp_debug_categories[i].category;
+						new_debug_value |= sccp_debug_categories[i].category;		/* summing the overlapping masks lost CORE */
 					}
 				}
 			} else {
 				// parse comma separated debug_var
-				boolean_t matched   = FALSE;
 				char *    tokenrest = NULL;
 				char *    token     = strtok_r(argument, delimiters, &tokenrest);
 				while (token != NULL) {
+					boolean_t matched = FALSE;						/* per token, or one match hid every later unknown one */
 					// match debug level name to enum
 					for (i = 0; i < ARRAY_LEN(sccp_debug_categories); i++) {
 						if (strcasecmp(token, sccp_debug_categories[i].key) == 0) {
 							if (subtract) {
-								if ((new_debug_value & sccp_debug_categories[i].category) == sccp_debug_categories[i].category) {
-									new_debug_value -= sccp_debug_categories[i].category;
-								}
+								new_debug_value &= ~sccp_debug_categories[i].category;		/* bit operations: a partly set composite mask carried */
 							} else {
-								if ((new_debug_value & sccp_debug_categories[i].category) != sccp_debug_categories[i].category) {
-									new_debug_value += sccp_debug_categories[i].category;
-								}
+								new_debug_value |= sccp_debug_categories[i].category;
 							}
 							matched = TRUE;
 						}
@@ -142,7 +138,7 @@ char * sccp_get_debugcategories(int32_t debugvalue)
 				// strlcpy(res, sccp_debug_categories[i].key, new_size);
 				snprintf(res, new_size - 1, "%s", sccp_debug_categories[i].key);
 			} else {
-				snprintf(res + strlen(res), new_size - 1, ",%s", sccp_debug_categories[i].key);
+				snprintf(res + strlen(res), new_size - strlen(res), ",%s", sccp_debug_categories[i].key);
 			}
 
 			size = new_size;
