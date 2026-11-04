@@ -310,7 +310,14 @@ boolean_t _sccp_event_fire(sccp_event_t * event, boolean_t forceSync)
 
 		size_t asyncsize = 0;
 		uint8_t _idx = __search_for_position_in_event_array(event->type);
-		
+		/* the search returns one past the end when no bit matches, and 0 (whatever the type) once the event module
+		 * has stopped and its table is gone: both indexed event_subscriptions wrongly */
+		if (!sccp_event_running || _idx >= NUMBER_OF_EVENT_TYPES) {
+			sccp_log((DEBUGCAT_EVENT)) (VERBOSE_PREFIX_3 "SCCP: (sccp_event_fire) event type %d %s, dropped\n", event->type, sccp_event_running ? "matches no subscription slot" : "fired after the event module stopped");
+			sccp_event_destroy(event);
+			return FALSE;
+		}
+
 		/* copy both vectors to a local copy while holding the rwlock */
 		sccp_event_vector_t *subscribers = &event_subscriptions[_idx].subscribers;
 		SCCP_VECTOR_RW_RDLOCK(subscribers);
