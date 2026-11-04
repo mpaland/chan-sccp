@@ -365,8 +365,7 @@ static boolean_t sccp_astgenwrap_handleHangup(constChannelPtr channel, const cha
 				// outbound / call initiator (running pbx_pbx_start)
 				sccp_log(DEBUGCAT_PBX)("%s: (%s): Hangup Queued\n", c->designator, hanguptype);
 				pbx_channel_unlock(pbx_channel);
-				res = ast_queue_hangup(pbx_channel) ? FALSE : TRUE;
-				res = TRUE;
+				res = ast_queue_hangup(pbx_channel) ? FALSE : TRUE;					/* the result was overwritten with TRUE */
 				break;
 			}
 			if(SCCP_CHANNELSTATE_IsSettingUp(c->state) || SCCP_CHANNELSTATE_IsConnected(c->state) || iPbx.channel_is_bridged(c)) {
@@ -597,7 +596,7 @@ void sccp_astwrap_connectedline(sccp_channel_t * channel, const void *data, size
 				SCCP_CALLINFO_ORIG_CALLEDPARTY_REDIRECT_REASON, tmpOrigCalledPartyRedirectReason,
 
 				SCCP_CALLINFO_LAST_REDIRECTINGPARTY_NUMBER, tmpCallingNumber,
-				SCCP_CALLINFO_LAST_REDIRECTINGPARTY_NAME, tmpCallingNumber,
+				SCCP_CALLINFO_LAST_REDIRECTINGPARTY_NAME, tmpCallingName,				/* the name, not the number again */
 				SCCP_CALLINFO_LAST_REDIRECT_REASON, tmpLastRedirectReason,
 
 				SCCP_CALLINFO_KEY_SENTINEL);
