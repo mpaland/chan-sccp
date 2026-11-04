@@ -2305,16 +2305,32 @@ void sccp_dev_postregistration(devicePtr d)
 	sccp_dev_check_displayprompt(d);
 
 #ifdef CS_SCCP_PARK
-	sccp_buttonconfig_t *config = NULL;
-	SCCP_LIST_LOCK(&d->buttonconfig);
-	SCCP_LIST_TRAVERSE(&d->buttonconfig, config, list) {
-		if (config->type == FEATURE && config->button.feature.id ==SCCP_FEATURE_PARKINGLOT) {
-			if(iParkingLot.attachObserver && iParkingLot.attachObserver(d, config)) {
-				iParkingLot.notifyDevice(d, config);
+	if (iParkingLot.attachObserver) {
+		/* snapshot the parkinglot buttons and call into the parkinglot after unlocking (as the detach path does):
+		 * holding buttonconfig while the parkinglot takes its lock and talks to the device closed a lock cycle
+		 * with the manager hook thread */
+		sccp_buttonconfig_t *config = NULL;
+		sccp_buttonconfig_t **parkinglots = NULL;
+		uint32_t numparkinglots = 0;
+		SCCP_LIST_LOCK(&d->buttonconfig);
+		uint32_t numbuttons = SCCP_LIST_GETSIZE(&d->buttonconfig);
+		if (numbuttons > 0 && (parkinglots = (sccp_buttonconfig_t **)sccp_calloc(numbuttons, sizeof(sccp_buttonconfig_t *)))) {
+			SCCP_LIST_TRAVERSE(&d->buttonconfig, config, list) {
+				if (config->type == FEATURE && config->button.feature.id == SCCP_FEATURE_PARKINGLOT && numparkinglots < numbuttons) {
+					parkinglots[numparkinglots++] = config;
+				}
 			}
 		}
+		SCCP_LIST_UNLOCK(&d->buttonconfig);
+		for (uint32_t idx = 0; idx < numparkinglots; idx++) {
+			if (iParkingLot.attachObserver(d, parkinglots[idx])) {
+				iParkingLot.notifyDevice(d, parkinglots[idx]);
+			}
+		}
+		if (parkinglots) {
+			sccp_free(parkinglots);
+		}
 	}
-	SCCP_LIST_UNLOCK(&d->buttonconfig);
 #endif
 	if (d->useHookFlash()) {
 		sccp_dev_setHookFlashDetect(d);
