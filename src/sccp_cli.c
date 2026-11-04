@@ -2598,7 +2598,9 @@ static int sccp_system_message(int fd, sccp_cli_totals_t *totals, struct mansess
 	int local_line_total = 0;
 	int res = RESULT_FAILURE;
 
-	if (argc == 3) {
+	/* 'sccp system message' without text clears the message: on the CLI only. Over AMI argc is now trimmed to the
+	 * parameters given, so a SCCPSystemMessage without MessageText would clear every phone instead of failing */
+	if (argc == 3 && !s) {
 		SCCP_RWLIST_RDLOCK(&GLOB(devices));
 		SCCP_RWLIST_TRAVERSE(&GLOB(devices), d, list) {
 			sccp_dev_clear_message(d, TRUE);
