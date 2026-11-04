@@ -79,6 +79,26 @@ static void sccp_protocol_sendCallInfoV3 (const sccp_callinfo_t * const ci, cons
 		SCCP_CALLINFO_PRESENTATION, &presentation,
 		SCCP_CALLINFO_KEY_SENTINEL);
 
+	/* the getter wrote raw UTF-8: convert to the phone's codepage like every other text sent to it (V7/V16 below
+	 * as well); copyStr2Locale works through a buffer of its own, so converting in place is safe */
+	{
+		char * const fields[] = {
+			msg->data.CallInfoMessage.calledPartyName, msg->data.CallInfoMessage.calledParty, msg->data.CallInfoMessage.cdpnVoiceMailbox,
+			msg->data.CallInfoMessage.callingPartyName, msg->data.CallInfoMessage.callingParty, msg->data.CallInfoMessage.cgpnVoiceMailbox,
+			msg->data.CallInfoMessage.originalCalledPartyName, msg->data.CallInfoMessage.originalCalledParty, msg->data.CallInfoMessage.originalCdpnVoiceMailbox,
+			msg->data.CallInfoMessage.lastRedirectingPartyName, msg->data.CallInfoMessage.lastRedirectingParty, msg->data.CallInfoMessage.lastRedirectingVoiceMailbox,
+		};
+		const size_t sizes[] = {
+			sizeof(msg->data.CallInfoMessage.calledPartyName), sizeof(msg->data.CallInfoMessage.calledParty), sizeof(msg->data.CallInfoMessage.cdpnVoiceMailbox),
+			sizeof(msg->data.CallInfoMessage.callingPartyName), sizeof(msg->data.CallInfoMessage.callingParty), sizeof(msg->data.CallInfoMessage.cgpnVoiceMailbox),
+			sizeof(msg->data.CallInfoMessage.originalCalledPartyName), sizeof(msg->data.CallInfoMessage.originalCalledParty), sizeof(msg->data.CallInfoMessage.originalCdpnVoiceMailbox),
+			sizeof(msg->data.CallInfoMessage.lastRedirectingPartyName), sizeof(msg->data.CallInfoMessage.lastRedirectingParty), sizeof(msg->data.CallInfoMessage.lastRedirectingVoiceMailbox),
+		};
+		for (size_t f = 0; f < ARRAY_LEN(fields); f++) {
+			device->copyStr2Locale(device, fields[f], fields[f], sizes[f]);
+		}
+	}
+
 	// 7920's exception. They don't seem to reverse the interpretation of the presentation flag
 	// if (device->skinny_type == SKINNY_DEVICETYPE_CISCO7920) {
 	//	msg->data.CallInfoMessage.partyPIRestrictionBits = presentation ? 0x0 : 0xf;
@@ -138,6 +158,7 @@ static void sccp_protocol_sendCallInfoV7 (const sccp_callinfo_t * const ci, cons
 
 
 	for (i = 0; i < dataSize; i++) {
+		device->copyStr2Locale(device, data[i], data[i], sizeof(data[i]));		/* the phone's codepage, see V3 */
 		data_len[i] = strlen(data[i]);
 		dummy_len += data_len[i];
 	}
@@ -225,6 +246,7 @@ static void sccp_protocol_sendCallInfoV16 (const sccp_callinfo_t * const ci, con
 		return;
 	}
 	for (field = 0; field < dataSize; field++) {
+		device->copyStr2Locale(device, data[field], data[field], sizeof(data[field]));	/* the phone's codepage, see V3 */
 		data_len = strlen(data[field]) + 1; 		//add NULL terminator
 		memcpy(dummy + dummy_len, data[field], data_len);
 		dummy_len += data_len;
@@ -1304,7 +1326,7 @@ static void sccp_protocol_sendUserToDeviceDataVersion1Message(constDevicePtr dev
 			sccp_log(DEBUGCAT_HIGH) (VERBOSE_PREFIX_1 "%s: (sccp_protocol_sendUserToDeviceDataVersion1Message) Message sent to device  (hdr_len: %d, msglen: %d/%d, msg-size: %d).\n", DEV_ID_LOG(device), hdr_len, msg_len, (int) strlen(xmlData), hdr_len + msg_len);
 			segment++;
 		}
-	} else if (data_len < StationMaxXMLMessage) {
+	} else if (data_len <= StationMaxXMLMessage) {						/* exactly the maximum fell between both branches and was never sent */
 		sccp_msg_t *msg = NULL;
 
 		hdr_len = sizeof(msg->data.UserToDeviceDataVersion1Message);

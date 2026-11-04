@@ -115,7 +115,9 @@ static inline skinny_codec_t sccp_astwrap_getSkinnyFormatSingle(struct ast_forma
 	}
 
 	if (codec == SKINNY_CODEC_NONE) {
-		ast_log(LOG_WARNING, "SCCP: (getSkinnyFormatSingle) No matching codec found");
+		/* a question every caller handles (with a notice of its own): a Local channel offering slin gets here on an
+		 * ordinary call, warning about it only taught operators to skim past warnings */
+		sccp_log(DEBUGCAT_CODEC)(VERBOSE_PREFIX_3 "SCCP: (getSkinnyFormatSingle) none of the offered formats has a skinny equivalent\n");
 	}
 	return codec;
 }
@@ -137,13 +139,13 @@ static uint8_t sccp_astwrap_getSkinnyFormatMultiple(struct ast_format_cap *ast_f
 		uint64_t ast_codec = ast_format_compatibility_format2bitfield(format);
 		ao2_ref(format, -1);
 
-		if ((found = pbx_codec2skinny_codec(ast_codec)) != SKINNY_CODEC_NONE) {
+		if ((found = pbx_codec2skinny_codec(ast_codec)) != SKINNY_CODEC_NONE && position < length) {	/* bounded by the caller's array */
 			codecs[position++] = found;
 		}
 	}
 
 	if (codecs[0] == SKINNY_CODEC_NONE) {
-		ast_log(LOG_WARNING, "SCCP: (getSkinnyFormatSingle) No matching codecs found");
+		sccp_log(DEBUGCAT_CODEC)(VERBOSE_PREFIX_3 "SCCP: (getSkinnyFormatMultiple) none of the offered formats has a skinny equivalent\n");
 	}
 
 	return position;
@@ -527,7 +529,7 @@ static void __find_joint_capabilities(sccp_channel_t *c, PBX_CHANNEL_TYPE* peer,
 
 			if (!ast_format_cap_empty(joint)) {
 				best_fmt_native = ast_format_cap_get_best_by_type(joint, media_type);
-				sccp_log(DEBUGCAT_CODEC) (VERBOSE_PREFIX_4 "%s: (find_joint_capabilities) NOT transcoding, best_native:%s\n", c->designator, ast_format_get_codec_name(best_fmt_native));
+				sccp_log(DEBUGCAT_CODEC) (VERBOSE_PREFIX_4 "%s: (find_joint_capabilities) NOT transcoding, best_native:%s\n", c->designator, best_fmt_native ? ast_format_get_codec_name(best_fmt_native) : "<none>");
 				if (best_fmt_native) {
 					ast_format_cap_remove_by_type(caps, media_type);
 					ast_format_cap_append(caps, best_fmt_native, 0);
@@ -544,10 +546,12 @@ static void __find_joint_capabilities(sccp_channel_t *c, PBX_CHANNEL_TYPE* peer,
 				}
 				ast_format_cap_append_from_cap(caps, payload_caps, media_type);
 				sccp_log(DEBUGCAT_CODEC) (VERBOSE_PREFIX_3 "%s: pbx_retrieve_remote_capabilities: transcoding, best_cap:%s, best_native:%s\n",
-					c->designator, ast_format_get_codec_name(best_fmt_cap), best_fmt_native ? ast_format_get_codec_name(best_fmt_native) : "");
+					c->designator, best_fmt_cap ? ast_format_get_codec_name(best_fmt_cap) : "<none>", best_fmt_native ? ast_format_get_codec_name(best_fmt_native) : "<none>");
 			}
 
+			ast_channel_lock(c->owner);								/* the native formats are written under the channel lock */
 			ast_format_cap_append_from_cap(caps, ast_channel_nativeformats(c->owner), AST_MEDIA_TYPE_UNKNOWN);
+			ast_channel_unlock(c->owner);
 			if (best_fmt_native) {
 				if (best_fmt_native != ast_format_none) {
 					if (!ast_format_cap_empty(caps)) {
@@ -1882,7 +1886,7 @@ static PBX_CHANNEL_TYPE *sccp_astwrap_request(const char *type, struct ast_forma
 #ifdef CS_SCCP_VIDEO
 	memset(&channel->remoteCapabilities.video, 0, sizeof(channel->remoteCapabilities.video));
 	if (videoCapabilities[0] != SKINNY_CODEC_NONE) {
-		memcpy(channel->remoteCapabilities.video, videoCapabilities, ARRAY_LEN(videoCapabilities));
+		memcpy(channel->remoteCapabilities.video, videoCapabilities, sizeof(channel->remoteCapabilities.video));	/* bytes, not elements: only the first codecs were copied */
 	} else if (video_codec) {
 		channel->remoteCapabilities.video[0] = video_codec;
 	}
@@ -2344,7 +2348,7 @@ static int sccp_astwrap_callerid_number(PBX_CHANNEL_TYPE *pbx_chan, char **cid_n
 static int sccp_astwrap_callerid_ton(PBX_CHANNEL_TYPE *pbx_chan, int *cid_ton)
 {
 	if (pbx_chan && ast_channel_caller(pbx_chan)->id.number.valid) {
-		*cid_ton = ast_channel_caller(pbx_chan)->ani.number.plan;
+		*cid_ton = ast_channel_caller(pbx_chan)->id.number.plan;							/* the plan of the number that was validated, not of the ANI */
 		return *cid_ton;
 	}
 	return 0;
@@ -2990,7 +2994,7 @@ static PBX_CHANNEL_TYPE *sccp_astwrap_findChannelWithCallback(int (*const found_
 static void sccp_astwrap_set_pbxchannel_linkedid(PBX_CHANNEL_TYPE * pbx_channel, const char *new_linkedid)
 {
 	if (pbx_channel) {
-		if (!strcmp(ast_channel_linkedid(pbx_channel), new_linkedid)) {
+		if (!new_linkedid || !strcmp(ast_channel_linkedid(pbx_channel), new_linkedid)) {
 			return;
 		}
 		// ast_cel_check_retire_linkedid(pbx_channel);
@@ -3078,7 +3082,7 @@ static int sccp_pbx_sendHTML(PBX_CHANNEL_TYPE * ast, int subclass, const char *d
 			} else {
 				fr.subclass.integer = AST_HTML_NOSUPPORT;
 			}
-			ast_queue_frame(ast, ast_frisolate(&fr));
+			ast_queue_frame(ast, &fr);										/* ast_queue_frame copies the frame: the isolated copy leaked */
 			res = 0;
 		}
 	}
@@ -3663,11 +3667,7 @@ static int unload_module(void)
 
 static enum ast_module_load_result load_module(void)
 {
- 	if (ast_module_check("chan_skinny.so")) {
- 		pbx_log(LOG_ERROR, "Chan_skinny is loaded. Please check modules.conf and remove chan_skinny before loading chan_sccp.\n");
- 		return AST_MODULE_LOAD_SUCCESS;
- 	}
-
+	/* the chan_skinny check is in the do{} below and declines; a copy here returned SUCCESS with nothing initialised */
 	enum ast_module_load_result res = AST_MODULE_LOAD_DECLINE;
 	do {
 		if (ast_module_check("chan_skinny.so")) {
