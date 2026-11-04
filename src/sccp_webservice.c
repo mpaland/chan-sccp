@@ -284,6 +284,9 @@ static int parse_outputfmt(PBX_VARIABLE_TYPE * request_params, PBX_VARIABLE_TYPE
 	const char * requested_outputfmt = sccp_retrieve_str_variable_byKey(request_params, "outformat");
 	if (!sccp_strlen_zero(requested_outputfmt)) {
 		*outputfmt = sccp_xml_outputfmt_str2val(requested_outputfmt);
+		if ((int)*outputfmt < 0 || (size_t)*outputfmt >= ARRAY_LEN(outputfmt2contenttype)) {
+			*outputfmt = SCCP_XML_OUTPUTFMT_CXML;			/* an unknown outformat returns the sentinel, which indexed outputfmt2contenttype[] out of bounds */
+		}
 		return 0;
 	}
 	return (*outputfmt == SCCP_XML_OUTPUTFMT_NULL) ? -1 : 0;
@@ -605,6 +608,8 @@ static struct ast_http_uri sccp_webservice_xslt_uri = {
 };
 
 /* begin test */
+#if DEBUG
+/* the self-tests reflect request headers and parameters back unescaped and without authentication: debug builds only */
 static boolean_t sccp_webservice_htmltest(const char * const uri, PBX_VARIABLE_TYPE * params, PBX_VARIABLE_TYPE * headers, pbx_str_t ** result)
 {
 	sccp_log(DEBUGCAT_WEBSERVICE)(VERBOSE_PREFIX_3 "SCCP: (sccp_webservice_test) Test Webservice\n");
@@ -661,6 +666,9 @@ static boolean_t xmlPostProcess(xmlDoc * const doc, const char * const uri, PBX_
 			sccp_log(DEBUGCAT_WEBSERVICE)(VERBOSE_PREFIX_3 "SCCP: (xmlPostProcess) Processing xsl client-side\n");
 			*resultstr = iXML.dump(doc, TRUE);
 		}
+	}
+	if (!*resultstr) {
+		res = FALSE;										/* the caller formats it with %s */
 	}
 	return res;
 }
@@ -725,7 +733,7 @@ static boolean_t sccp_webservice_xmltest(const char * const uri, PBX_VARIABLE_TY
 		}
 	*/
 	char * resultstr = NULL;
-	if ((res |= xmlPostProcess(doc, uri, params, headers, &resultstr))) {
+	if ((res |= xmlPostProcess(doc, uri, params, headers, &resultstr)) && resultstr) {
 		// create a function for this
 		sccp_log(DEBUGCAT_WEBSERVICE)(VERBOSE_PREFIX_3 "resultstr: %s\n", resultstr);
 		pbx_str_append(result, 0, "%s", resultstr);
@@ -737,6 +745,7 @@ static boolean_t sccp_webservice_xmltest(const char * const uri, PBX_VARIABLE_TY
 
 	return res;
 }
+#endif /* DEBUG */
 /* end test */
 
 static void __attribute__((constructor)) init_webservice(void)
@@ -745,8 +754,10 @@ static void __attribute__((constructor)) init_webservice(void)
 		SCCP_VECTOR_RW_INIT(&handlers, 1);
 
 		/* begin test */
+#if DEBUG
 		iWebService.addHandler("testhtml", sccp_webservice_htmltest, SCCP_XML_OUTPUTFMT_HTML);
 		iWebService.addHandler("testxml", sccp_webservice_xmltest, SCCP_XML_OUTPUTFMT_XML);
+#endif
 		/* end test */
 
 		ast_http_uri_link(&sccp_webservice_uri);

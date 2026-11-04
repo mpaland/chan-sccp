@@ -235,10 +235,8 @@ static void __attribute__((constructor)) init_xml(void)
 
 static void __attribute__((destructor)) destroy_xml(void)
 {
-	xsltCleanupGlobals();
-	xmlCleanupParser();
-	xmlMemoryDump();
-	xmlCleanupGlobals();
+	/* nothing to tear down: xmlCleanupParser/xmlCleanupGlobals/xsltCleanupGlobals are process global and only for the
+	 * main program at exit; Asterisk and other modules keep using libxml2 after this module unloads */
 }
 
 /* Assign to interface */
