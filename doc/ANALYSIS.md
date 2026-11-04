@@ -2,7 +2,7 @@
 
 Status: all items found during the analysis are fixed in the commit series `e4b47129..HEAD` on `develop`
 (based on upstream `chan-sccp/chan-sccp@90dc24f2`, 2023-12-19). What remains is runtime verification on
-real phones, listed in section 5.
+real phones, listed in section 5. Section 7 covers the fixes ported afterwards from the nortien/chan-sccp fork.
 
 ## 1. Scope and method
 
@@ -274,3 +274,81 @@ SCCP phones before a release:
   since autotools scripts do not tolerate CRLF.
 - `doc/asterisk-22-current/` and `doc/asterisk-24-testing/` are untracked local copies of the Asterisk source
   used as API reference; `.gitignore` covers `/doc/asterisk-*`.
+
+## 7. Fixes ported from the nortien/chan-sccp fork
+
+[nortien/chan-sccp](https://github.com/nortien/chan-sccp) (branch `stable`, release 4.4.1 of 2026-09-11)
+forked from the same upstream commit as this tree (`6ccfa00c`, 2021-12-29) and carries 63 commits of its
+own, mostly from two code review passes. Every one of them was compared sub-fix by sub-fix with this tree,
+ignoring everything that only concerns Asterisk < 20 (the ast106-ast115 wrappers). About 35 of their fixes
+were already done here or cannot happen in the rewritten refcount/session/threadpool code; about 130
+defects were still present. They were re-done on this code (not cherry-picked: the layout differs and
+several of nortien's fixes are incomplete), one commit per area:
+
+| Commit | Area | nortien commits |
+|---|---|---|
+| `2a1c4b71` | phone message bounds: XMLAlarm pre-auth stack overflow, AccessoryStatus heap write, capability/addon counts, nameless Register/token, ServiceURL, session header handling | f5da07f4, 0bbdf457, de777291, 72257f87, 6d7d1ac7, c3c9f522 |
+| `b8f21769` | TLS accept, permit=internal mask, ACL address family, permithost | 7cf1f49d, 884678ce, 9a90fd88, 83102578, edb7b1bf, 7c3f2589 |
+| `d6765507` | token requests (live session teardown with fallback=no), keepalive timeouts | 0a9acf99, c3c9f522, 7be64797 |
+| `04d3b69d` | AMI privilege classes, AMI argument handling, broken AMI/CLI actions, reload of new sections | dfc5d714, 6ffe9db4, 6d7d1ac7, 49cbb195, 0bdda778, b116d07b |
+| `771b3c4d` | dialplan functions, `sccp_parseComposedId`, string helpers, debug masks | 8fd7ff84, 7c3f2589, 83102578 |
+| `2e40f809` | channel lock helper, codec preference erosion, transfer, media acks, forward leak | 06cc66a5, dcbf2313, e7158e41, f5da07f4 |
+| `e9a25990` | Record via MixMonitor (Asterisk 21+), pickup, Dial/Redial/NewCall softkeys, barge notice | 814bc1c1, 7fde842e, 7bef8434, f5da07f4, 72257f87, 49cbb195 |
+| `b0b646d1` | parkinglot lock order, observer lifetime, removal races | 63508be0 (reworked without the threadpool queue) |
+| `3020c512` | button template, speeddials (#566), devstate (#564), hints, hotline, MWI, active channel locking | 5ed1301e, a7848af4, 38c32d3e, 0bdda778, d1f0c263, de777291, 6d7d1ac7 |
+| `cb6f7d9b` | conference list authorisation, playback lock, DTU ids | 7bef8434 |
+| `25a0b746` | Asterisk adapter: hangup result, caps copy, TON, frame leak, codec bounds, codepage of CallInfo | 28b5ff63, 9c9bc9a4, 6d7d1ac7, 0b466dfa, 3d20a177, bc73716a, 49cbb195 |
+| `80a4efe3` | config numeric parsing, bindaddr/port, codec list helpers, event table index | 320ea427, 9a90fd88, 7c3f2589, bc73716a, 49cbb195, 884678ce, 9435b03c |
+| `e8fe69d6` | experimental web service (`--enable-experimental-xml`) | cdd686e2, ac32ffe2 |
+| `1a76418b` | `make dist`, `make uninstall`, release target, ChangeLog, autorevision, debian/rules | 3dc7c35e, 49cbb195 |
+| `20a03ef4` | low severity races, logging, compiler warnings | a9cf56ec, ed3e07f6, c3c9f522, bc73716a, b116d07b, 6d7d1ac7 |
+| `f099ad76` | feature: seized shared line shown on the other appearances | 17e3d394 |
+| `36a1ec00` | feature: Park softkey greyed while Asterisk cannot park | 8d1d8e71 |
+| `6aa05bbc` | feature: conference and video built by default | a40d834e |
+
+Found while porting and not (or not completely) fixed by nortien: nameless token requests, the reset DTU
+state (`transactionID` 0, NULL action) in the conference handler, the `sccp_parseComposedId` terminator,
+`getSkinnyFormatMultiple` writing past its array, the AMI privileges of the `sccp_management.c` actions, the
+event table slot 0 after the event module stopped, the active channel read without a lock, the branch name
+in the distribution directory name, and the `isBarged` flag left set by failed barges.
+
+Deliberately not ported:
+
+- the refcount quarantine/reaper (0c3192ee): a time based grace period, not a guarantee; the raw readers it
+  covered for are fixed instead;
+- the CONNTRANS keyset only during a transfer (de777291): users would lose select, dirtrfr, meetme, cfwd and
+  JOIN from the connected keyset;
+- moving about 15 options to NEEDDEVICERESET (320ea427): phones would reboot on reload;
+- withholding Record on direct-RTP phones and the packed softkey row (8d1d8e71, 5ed1301e);
+- the stricter line validation (7c3f2589), the recorddigittimeoutchar change (dcbf2313) and refusing token
+  requests while a session is alive (0a9acf99): behaviour changes that need testing on phones;
+- `waitForPendingRequests` returning non-zero on timeout (7be64797): it would leave answered calls in ringout;
+- the direct-RTP peer update after a stream reopen (dcbf2313): needs verification on phones;
+- `pendingUpdate`/`pendingDelete` atomics and codec set tearing (1683cf05), and the buttons array race
+  (38c32d3e): low impact, the proper fix is an accessor under a device lock for about a dozen readers;
+- the comment-only commit 92b83e53, the ast106-ast115 wrappers, the PACKAGE_VERSION version probe and the
+  macroexten stubs (not needed here).
+
+Verification:
+
+- every commit built with Asterisk 22.5.2 headers in three configurations (plain, `--enable-debug`, and
+  `--enable-conference --enable-video --enable-experimental-xml --with-hash-size=3001
+  --enable-distributed-devicestate --enable-advanced-functions`): 0 errors throughout; the warnings went
+  from 11 / 11 / 15 to 0 / 0 / 2 (the two left are libxml2 deprecations);
+- `make dist`, a build from the tarball, and `make install` / `make uninstall` into a DESTDIR;
+- a user level Asterisk 22.5.2 instance with only chan_sccp and its dependencies loaded, sent malformed
+  messages from a small client (scripts are not part of the tree):
+
+  | Test | develop | this series |
+  |---|---|---|
+  | XMLAlarm with oversized fields (before registration) | Asterisk dies: stack smashing detected | alive |
+  | Register without a device name | Asterisk dies | rejected, alive |
+  | Registered device, AccessoryStatus with out of range index/state | Asterisk dies (assert; out of bounds write without asserts) | ignored with a warning, alive |
+  | TLS connection with a failed handshake | alive | alive, no session |
+
+Needs verification on real phones, in addition to section 5: transfer while the destination rings and
+resume after ending a second call; two parkinglot buttons with a phone registering while a call is parked;
+Record on Asterisk 21+; AMI SCCPCallForward / SCCPDndDevice / SCCPLineForwardUpdate; hinted speeddials on a
+7960 class phone and a phone without multi-purpose buttons; video off during a call keeping the audio;
+token fallback (odd/even/script) in a two-server setup; a seized shared line on a second phone; the Park key
+with `res_parking` unloaded.
