@@ -220,20 +220,27 @@ int sccp_register_management(void)
 	int result = 0;
 
 	/* Register manager commands */
+	/* Read-only actions are reporting; the ones that change device configuration need the config class and the
+	 * ones that act on calls or phones the call class. All of them used to be registered as reporting, so an AMI
+	 * account with write=reporting could hang up, answer, start and forward calls or restart phones. */
 #define _MAN_FLAGS	(EVENT_FLAG_SYSTEM | EVENT_FLAG_CONFIG | EVENT_FLAG_REPORTING)
+#define _MAN_CONFIG_FLAGS	(EVENT_FLAG_SYSTEM | EVENT_FLAG_CONFIG)
+#define _MAN_CALL_FLAGS	(EVENT_FLAG_SYSTEM | EVENT_FLAG_CALL)
 
 	result = pbx_manager_register("SCCPListDevices", _MAN_FLAGS, sccp_manager_show_devices, "List SCCP devices", management_show_devices_desc);
 	result |= pbx_manager_register("SCCPListLines", _MAN_FLAGS, sccp_manager_show_lines, "List SCCP lines", management_show_lines_desc);
-	result |= pbx_manager_register("SCCPDeviceUpdate", _MAN_FLAGS, sccp_manager_device_update, "add a line to device", management_device_update_desc);
-	result |= pbx_manager_register("SCCPLineForwardUpdate", _MAN_FLAGS, sccp_manager_line_fwd_update, "set call-forward on a line", management_line_fwd_update_desc);
-	result |= pbx_manager_register("SCCPHangupCall", _MAN_FLAGS, sccp_manager_hangupCall, "hangup a channel", management_hangupcall_desc);
-	result |= pbx_manager_register("SCCPHoldCall", _MAN_FLAGS, sccp_manager_holdCall, "hold/unhold a call", management_hold_desc);
-	result |= iPbx.register_manager(deviceAddLine_command, _MAN_FLAGS, sccp_manager_device_add_line, NULL, NULL);
-	result |= iPbx.register_manager(startCall_command, _MAN_FLAGS, sccp_manager_startCall, NULL, NULL);
-	result |= iPbx.register_manager(answerCall_command, _MAN_FLAGS, sccp_manager_answerCall2, NULL, NULL);
+	result |= pbx_manager_register("SCCPDeviceUpdate", _MAN_CONFIG_FLAGS, sccp_manager_device_update, "add a line to device", management_device_update_desc);
+	result |= pbx_manager_register("SCCPLineForwardUpdate", _MAN_CALL_FLAGS, sccp_manager_line_fwd_update, "set call-forward on a line", management_line_fwd_update_desc);
+	result |= pbx_manager_register("SCCPHangupCall", _MAN_CALL_FLAGS, sccp_manager_hangupCall, "hangup a channel", management_hangupcall_desc);
+	result |= pbx_manager_register("SCCPHoldCall", _MAN_CALL_FLAGS, sccp_manager_holdCall, "hold/unhold a call", management_hold_desc);
+	result |= iPbx.register_manager(deviceAddLine_command, _MAN_CONFIG_FLAGS, sccp_manager_device_add_line, NULL, NULL);
+	result |= iPbx.register_manager(startCall_command, _MAN_CALL_FLAGS, sccp_manager_startCall, NULL, NULL);
+	result |= iPbx.register_manager(answerCall_command, _MAN_CALL_FLAGS, sccp_manager_answerCall2, NULL, NULL);
 	result |= iPbx.register_manager(configMetaData_command, _MAN_FLAGS, sccp_manager_config_metadata, NULL, NULL);
-	result |= iPbx.register_manager(deviceRestart_command, _MAN_FLAGS, sccp_manager_restart_device, NULL, NULL);
-	result |= iPbx.register_manager(deviceSetDND_command, _MAN_FLAGS, sccp_manager_device_set_dnd, NULL, NULL);
+	result |= iPbx.register_manager(deviceRestart_command, _MAN_CALL_FLAGS, sccp_manager_restart_device, NULL, NULL);
+	result |= iPbx.register_manager(deviceSetDND_command, _MAN_CALL_FLAGS, sccp_manager_device_set_dnd, NULL, NULL);
+#	undef _MAN_CALL_FLAGS
+#	undef _MAN_CONFIG_FLAGS
 #	undef _MAN_FLAGS
 
 	if (ast_manager_check_enabled())
@@ -560,8 +567,7 @@ static int sccp_manager_device_add_line(struct mansession *s, const struct messa
 		return 0;
 	}
 	if (sccp_config_addButton(&d->buttonconfig, -1, LINE, line->name, NULL, NULL) == SCCP_CONFIG_CHANGE_CHANGED) {
-		d->pendingUpdate = 1;
-		sccp_config_addButton(&d->buttonconfig, -1, LINE, line->name, NULL, NULL);
+		d->pendingUpdate = 1;											/* the button was added a second time here */
 		sccp_device_check_update(d);
 		astman_append(s, "Done\r\n");
 		astman_append(s, "\r\n");
@@ -641,11 +647,16 @@ static int sccp_manager_line_fwd_update(struct mansession *s, const struct messa
 					cfwd_type = SCCP_CFWD_NOANSWER;
 				}
 				if(cfwd_type != SCCP_CFWD_NONE) {
-					ld->cfwd[cfwd_type].enabled = sccp_true(Disable);
+					/* this is the enable path (Disable is false here): sccp_true(Disable) made it impossible to enable */
+					ld->cfwd[cfwd_type].enabled = !sccp_strlen_zero(number);
 					const char * destination = ld->cfwd[cfwd_type].enabled ? number : "";
 					sccp_copy_string(ld->cfwd[cfwd_type].number, destination, sizeof(ld->cfwd[cfwd_type].number));
 					sccp_feat_changed(ld->device, ld, sccp_cfwd2feature(cfwd_type));
 					snprintf(cbuf, sizeof(cbuf), "Line %s CallForward %s set to %s", lineName, sccp_cfwd2str(cfwd_type), destination);
+				} else {
+					/* used to fall through to an ack with an empty message */
+					astman_send_error(s, m, "Unknown Forwardtype, expected one of: all, busy, noanswer");
+					return 0;
 				}
 			}
 			sccp_dev_forward_status(line, ld->lineInstance, ld->device);
@@ -734,6 +745,7 @@ static int sccp_manager_device_set_dnd(struct mansession *s, const struct messag
 				d->dndFeature.status = SCCP_DNDMODE_OFF;
 			} else {
 				astman_send_error(s, m, "DNDState Variable has to be one of (on/off/reject/silent).");
+				return 0;											/* the ack below would answer a second time */
 			}
 
 			if (d->dndFeature.status != prevStatus) {
@@ -802,6 +814,10 @@ static int sccp_manager_startCall(struct mansession *s, const struct message *m)
 		return 0;
 	}
 	AUTO_RELEASE(sccp_channel_t, new_channel, sccp_channel_newcall(line, d, sccp_strlen_zero(number) ? NULL : (char *)number, SKINNY_CALLTYPE_OUTBOUND, NULL, (ids.uniqueid) ? &ids : NULL));
+	if (!new_channel) {
+		astman_send_error(s, m, "Could not start the call");						/* it always said "Call Started" */
+		return 0;
+	}
 	astman_send_ack(s, m, "Call Started");
 	return 0;
 }
@@ -1115,11 +1131,16 @@ boolean_t sccp_manager_action2str(const char *manager_command, char **outStr)
 
 	if(!outStr || sccp_strlen_zero(manager_command) || !(buf = ast_str_thread_get(&hookresult_threadbuf, HOOKRESULT_INITSIZE))) {
 		pbx_log(LOG_ERROR, "SCCP: No OutStr or Command Provided\n");
-        	return -2;
+        	return FALSE;											/* -2 through a boolean_t is TRUE: the error reported success */
 	}
 
 	struct manager_custom_hook hook = {__FILE__, __sccp_manager_hookresult};
         failure = ast_hook_send_action(&hook, manager_command);							/* "Action: ParkedCalls\r\n" */
+	/* the hook appends to the same thread buffer and may have grown (moved) it: fetch it again */
+	buf = ast_str_thread_get(&hookresult_threadbuf, HOOKRESULT_INITSIZE);
+	if (!buf) {
+		return FALSE;
+	}
         if (!failure) {
 		sccp_log(DEBUGCAT_CORE)("SCCP: Sending AMI Result String: %s\n", pbx_str_buffer(buf));
         	*outStr = pbx_strdup(pbx_str_buffer(buf));
