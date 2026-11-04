@@ -282,8 +282,10 @@ int sccp_parseComposedId(const char *labelString, unsigned int maxLength, sccp_s
 						res++;
 						break;
 					default:
-						extension[i] = *stringIterator;
-						i++;
+						if (i < SCCP_MAX_EXTENSION - 1) {				/* the string comes from the dialplan (Dial(SCCP/...)) */
+							extension[i] = *stringIterator;
+							i++;
+						}
 						break;
 				}
 				break;
@@ -325,7 +327,7 @@ int sccp_parseComposedId(const char *labelString, unsigned int maxLength, sccp_s
 						res++;
 						break;
 					case '#':
-						subscriptionId->name[i] = '\0';
+						subscriptionId->number[i] = '\0';				/* terminates the field being parsed, not name */
 						i = 0;
 						state = LABEL;
 						res++;
@@ -337,8 +339,10 @@ int sccp_parseComposedId(const char *labelString, unsigned int maxLength, sccp_s
 						res++;
 						break;
 					default:
-						subscriptionId->number[i] = *stringIterator;
-						i++;
+						if (i < sizeof(subscriptionId->number) - 1) {
+							subscriptionId->number[i] = *stringIterator;
+							i++;
+						}
 						break;
 				}
 				break;
@@ -364,8 +368,10 @@ int sccp_parseComposedId(const char *labelString, unsigned int maxLength, sccp_s
 						res++;
 						break;
 					default:
-						subscriptionId->name[i] = *stringIterator;
-						i++;
+						if (i < sizeof(subscriptionId->name) - 1) {
+							subscriptionId->name[i] = *stringIterator;
+							i++;
+						}
 						break;
 				}
 				break;
@@ -385,8 +391,10 @@ int sccp_parseComposedId(const char *labelString, unsigned int maxLength, sccp_s
 						res++;
 						break;
 					default:
-						subscriptionId->label[i] = *stringIterator;
-						i++;
+						if (i < sizeof(subscriptionId->label) - 1) {
+							subscriptionId->label[i] = *stringIterator;
+							i++;
+						}
 						break;
 				}
 				break;
@@ -400,8 +408,10 @@ int sccp_parseComposedId(const char *labelString, unsigned int maxLength, sccp_s
 						res++;
 						break;
 					default:
-						subscriptionId->aux[i] = *stringIterator;
-						i++;
+						if (i < sizeof(subscriptionId->aux) - 1) {
+							subscriptionId->aux[i] = *stringIterator;
+							i++;
+						}
 						break;
 				}
 				break;
@@ -411,6 +421,11 @@ int sccp_parseComposedId(const char *labelString, unsigned int maxLength, sccp_s
 				res = 0;
 				break;
 		}
+	}
+	/* stopped by maxLength in the middle of the extension: it still needs its terminator (the subscription
+	 * fields are zeroed above and their writes stop one short of the end) */
+	if (!endDetected && state == EXTENSION) {
+		extension[i] = '\0';
 	}
 	return res;
 }
@@ -565,6 +580,7 @@ gcc_inline void sccp_camelcase(char * instr)
 		if (!isalnum(instr[i])) {
 			i++;
 			capsNext = TRUE;
+			continue;								/* re-check for the end: a trailing separator read (and wrote) past it */
 		}
 		instr[j++] = capsNext ? toupper(instr[i++]) : tolower(instr[i++]);
 		capsNext   = FALSE;
@@ -1366,7 +1382,10 @@ char *sccp_dec2binstr(char *buf, size_t size, int value)
 
 gcc_inline void sccp_copy_string(char *dst, const char *src, size_t size)
 {
-	pbx_assert(NULL != dst && NULL != src);
+	pbx_assert(NULL != dst);
+	if (!src) {										/* unset optional settings are NULL (e.g. SCCPLINE(x,vmnum)) */
+		src = "";
+	}
 	if (do_expect(size != 0)) {
 		while (do_expect(--size != 0)) {
 			if (+(*dst++ = *src++) == '\0') {
