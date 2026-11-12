@@ -1,5 +1,43 @@
 # Changelog
 
+## [4.5.0](https://github.com/mpaland/chan-sccp/compare/v4.4.0...v4.5.0) (2026-11-12)
+
+
+### Features
+
+* **build:** conference and video support on by default ([bf709c7](https://github.com/mpaland/chan-sccp/commit/bf709c7ef694e8835f862b74bd63301a97a2f1c5))
+* **park:** grey the Park softkey while Asterisk cannot park ([3856ab3](https://github.com/mpaland/chan-sccp/commit/3856ab3c33d3da4899eee81e3f16ea54904e0439))
+* **sharedline:** show a seized shared line on the other appearances ([25e9c62](https://github.com/mpaland/chan-sccp/commit/25e9c6284eed81d67a9cda75c843b103eb6c8e21))
+
+
+### Bug Fixes
+
+* **actions:** bound every field taken from phone messages ([8793f47](https://github.com/mpaland/chan-sccp/commit/8793f4742351d6727462e2c3d4da918b50b75f4f))
+* **ami,cli:** privilege classes, argument handling and broken actions ([3d53c9f](https://github.com/mpaland/chan-sccp/commit/3d53c9feb6ebced8e97076cb0a0aed44a1dd6cae))
+* **ami:** SCCPSystemMessage without MessageText must not clear all phones ([ff526a4](https://github.com/mpaland/chan-sccp/commit/ff526a42db76a4c7023bce90515c32cc186e980c))
+* **appfunctions,utils:** bound the dialplan functions and string helpers ([49b9385](https://github.com/mpaland/chan-sccp/commit/49b9385406a5811cde4c950442860b528c04cedf))
+* **channel,transfer:** lock helper, codec preferences, transfer and media acks ([a96d4cc](https://github.com/mpaland/chan-sccp/commit/a96d4ccce28f5fb68b4d62ffee3222caea0cde56))
+* **conference:** moderator check on list actions, playback lock, DTU ids ([873e4dd](https://github.com/mpaland/chan-sccp/commit/873e4dd39523d158012ea095e9ff22a520d3d897))
+* **config,codec,event:** numeric parsing, bindaddr port, codec lists ([8869711](https://github.com/mpaland/chan-sccp/commit/88697117d8d1a965f9ef70e4ece16d9b039b9337))
+* **features,softkeys:** Record via MixMonitor, pickup, Dial, redial and others ([6d77ac8](https://github.com/mpaland/chan-sccp/commit/6d77ac87562d8140bef0aacba1329c11b9992b98))
+* **hint,mwi,line,device:** speeddials, button template, hints, active channel ([c5040c5](https://github.com/mpaland/chan-sccp/commit/c5040c5124837c85e2b3049c6637b082d7c43e7a))
+* low severity races, logging and compiler warnings ([834b405](https://github.com/mpaland/chan-sccp/commit/834b405a8fbb21601cef7451e77aeb7700d9da4f))
+* **parkinglot:** lock order, observer lifetime and removal races ([9fdec33](https://github.com/mpaland/chan-sccp/commit/9fdec33eb306220d609fa0e58407a5e302474b16))
+* **pbx:** Asterisk adapter results, references, bounds and codepage ([365b6f1](https://github.com/mpaland/chan-sccp/commit/365b6f1777b558420e78e7b8a46eb47b032ee665))
+* **token,session:** token request handling and keepalive timeouts ([87b3e90](https://github.com/mpaland/chan-sccp/commit/87b3e90a41c620cc536fee994b06f50b40c9f6df))
+* **transport,acl:** TLS accept, internal network mask, ACL family, permithost ([5f1b2ae](https://github.com/mpaland/chan-sccp/commit/5f1b2ae1f75c3200eac4507fdf8bf06fed72f4d6))
+* **xml,webservice:** global libxml teardown, outformat bound, self-tests ([8eb9893](https://github.com/mpaland/chan-sccp/commit/8eb9893a85725d8c36093275e808d04b4751d2fa))
+
+
+### Build System
+
+* make dist and make uninstall work, release target without editor ([3fd94c5](https://github.com/mpaland/chan-sccp/commit/3fd94c50552f5815fe8b8e336ba7e2f4d76798d0))
+
+
+### Documentation
+
+* NEWS and ANALYSIS section for the fixes ported from nortien/chan-sccp ([dcfd479](https://github.com/mpaland/chan-sccp/commit/dcfd4790c31ac9555f748cfc7edaba88135f3e20))
+
 ## [4.4.0](https://github.com/mpaland/chan-sccp/compare/v4.3.5...v4.4.0) (2026-11-03)
 
 
